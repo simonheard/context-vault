@@ -1,50 +1,53 @@
-# Architecture
+# 技术架构
 
-## System shape
+[English](ARCHITECTURE.en.md)
 
-```text
-Official exports / manual files
-              |
-              v
-      Import adapters (CLI)
-              |
-              v
-  Normalization + validation + dedupe
-              |
-              v
-  Local SQLite vault + FTS5 + artifacts
-         |                     |
-         v                     v
- Review/redaction        Export adapters
-                               |
-                     Markdown / JSON / provider packs
-
-Future browser extension ----> local service
-Future encrypted sync <------> ciphertext-only VPS
-```
-
-## Package direction
+## 系统结构
 
 ```text
-cli -> application services -> domain model
-                         |-> import adapters
-                         |-> export adapters
-                         |-> vault repository
+官方导出 / 手动文件
+          |
+          v
+      导入适配器
+          |
+          v
+    标准化、验证、去重
+          |
+          v
+本地 SQLite vault + FTS5
+       /          \
+      v            v
+  审阅与脱敏      导出适配器
+                    |
+       Markdown / JSON / 平台上下文包
+
+未来浏览器扩展 ---> 本地服务
+未来加密同步 <----> 密文 VPS
 ```
 
-Vendor-specific schemas must not leak into the domain model. Import adapters
-produce normalized records; export adapters consume reviewed normalized data.
+官方导出和手动文件是第一阶段主要入口。平台适配器负责解析，核心层只处理统一模型。
+审阅后的数据才能进入导出适配器。浏览器扩展与 VPS 均不作为系统真相来源。
 
-## Core objects
+## 包依赖方向
 
-- `Conversation`: source identity, title, timestamps, participants, scope.
-- `Message`: stable source reference, role, content parts, ordering, timestamps.
-- `Artifact`: local content-addressed file metadata; secret material prohibited.
-- `Memory`: profile, preference, project, decision, fact, task, or summary.
-- `Export`: immutable manifest of what was deliberately sent and where.
+```text
+CLI -> 应用服务 -> 领域模型
+              |-> 导入适配器
+              |-> 导出适配器
+              |-> vault repository
+```
 
-Every memory includes provenance, confidence, validity period, sensitivity,
-scope, and one of these states:
+平台 schema 不得泄漏到领域模型：导入适配器产生标准记录，导出适配器消费已审阅记录。
+
+## 核心对象
+
+- `Conversation`：来源身份、标题、时间、参与者和作用域。
+- `Message`：稳定来源引用、角色、内容、顺序和时间。
+- `Artifact`：本地内容寻址文件元数据；禁止存储密钥。
+- `Memory`：个人资料、偏好、项目、决策、事实、任务或摘要。
+- `Export`：用户明确发送了哪些内容、发送到何处的不可变清单。
+
+每条记忆包含来源、置信度、有效期、敏感级别、作用域和生命周期状态。
 
 ```text
 candidate -> confirmed -> expired
@@ -53,46 +56,37 @@ candidate -> confirmed -> expired
   deleted     conflicted
 ```
 
-`inferred` is recorded as an extraction method, not permission to export.
+`inferred` 只描述提取方法，不等同于允许导出。
 
-## Local vault
+## 本地 vault
 
-The bootstrap schema creates metadata and memory tables plus an FTS5 index.
-Conversation/message/artifact migrations will be added alongside M1 adapters.
-Schema changes must be versioned and forward-only, with backups before a
-destructive migration.
-
-Suggested production layout:
+当前 schema 包含元数据、记忆表和 FTS5 索引。M1 将随导入适配器加入会话、消息和附件
+migration。所有 schema 变更必须版本化、只向前迁移，并在破坏性变更前备份。
 
 ```text
-.aimem/
+.contextvault/
   vault.sqlite
   artifacts/<sha256-prefix>/<sha256>
   exports/<export-id>/manifest.json
   config.toml
 ```
 
-## Trust boundaries
+## 信任边界
 
-- Provider exports are untrusted input: reject path traversal, decompression
-  bombs, malformed encodings, oversized members, and executable attachments.
-- The local vault may contain highly sensitive data; restrictive permissions
-  and encrypted-at-rest support are required before broad release.
-- LLM extraction output is untrusted: validate schema and require confirmation
-  for high-risk facts.
-- The browser extension sends only user-reviewed data to a provider page.
-- The future server receives encrypted objects and minimal sync metadata only.
+- 平台导出是不可信输入：防止路径穿越、解压炸弹、异常编码、超大文件和可执行附件。
+- vault 可能包含高度敏感数据；公开发布前需要限制文件权限并支持静态加密。
+- LLM 提取结果不可信：验证 schema，高风险事实必须人工确认。
+- 扩展只能将用户审阅过的数据发送给平台。
+- 未来服务器只接收密文和最少同步元数据。
 
-## Adapter contracts
+## 适配器契约
 
-Import adapters should expose detection, validation, iteration, and a format
-version. Export adapters should declare capability limits so the CLI can explain
-whether a target accepts full history, a context document, or another package.
+导入适配器应提供格式检测、验证、迭代读取和格式版本。导出适配器应明确目标平台能力，
+以便 CLI 说明目标接受完整历史、上下文文档还是其他包格式。
 
-## Encryption direction
+## 加密方向
 
-For M4, derive a wrapping key from the user's secret with Argon2id, generate a
-random key per vault, and encrypt objects with XChaCha20-Poly1305. The server
-must never receive the user secret or plaintext vault key. The exact protocol
-requires a dedicated security review before implementation.
+M4 计划用 Argon2id 从用户秘密派生包装密钥，为每个 vault 生成随机密钥，并使用
+XChaCha20-Poly1305 加密对象。服务器永远不能收到用户秘密或明文 vault 密钥。正式实现前
+必须完成独立安全评审。
 

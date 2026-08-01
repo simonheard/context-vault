@@ -5,16 +5,16 @@ import sqlite3
 import sys
 from pathlib import Path
 
-from aimem import __version__
-from aimem.vault import initialize, status
+from contextvault import __version__
+from contextvault.vault import initialize, status
 
 
-DEFAULT_VAULT = Path(".aimem/vault.sqlite")
+DEFAULT_VAULT = Path(".contextvault/vault.sqlite")
 
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
-        prog="aimem", description="Portable AI memory and context tools"
+        prog="contextvault", description="Local-first, user-owned AI context vault"
     )
     parser.add_argument("--version", action="version", version=__version__)
     parser.add_argument(

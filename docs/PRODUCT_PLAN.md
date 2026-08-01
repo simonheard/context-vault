@@ -1,135 +1,119 @@
-# Product plan
+# 产品计划
 
-## Positioning
+[English](PRODUCT_PLAN.en.md)
 
-`aimem` is a user-owned context layer between AI providers. It helps people
-move useful history, preferences, decisions, project state, and artifacts
-without treating every raw conversation as permanent truth.
+## 定位
 
-Primary promise:
+ContextVault 是连接不同 AI 平台的用户自有上下文层，帮助用户迁移有价值的历史、偏好、
+决策、项目状态和文件，同时避免把每段原始聊天都当成永久事实。
 
-> Your AI context belongs to you, not to one AI provider.
+首批目标用户是同时使用多个 AI 工具的开发者：痛点明确、数据较结构化、接受 CLI，
+也更容易验证付费价值。
 
-The initial target user is a developer who uses multiple AI tools and needs
-project context to survive provider changes. This segment has clear pain,
-structured data, strong CLI adoption, and a plausible path to paid features.
+## 要解决的问题
 
-## Problems to solve
+1. 官方导出格式不统一且持续变化。
+2. 原始聊天嘈杂、过期、互相矛盾，直接作为上下文成本高。
+3. 用户难以审计一个 AI 从另一个 AI 继承了什么。
+4. 只依赖浏览器自动化既脆弱，也可能带来账号风险。
+5. 服务端明文存储会造成不可接受的隐私暴露。
 
-1. Official export formats differ and change over time.
-2. Raw chat history is noisy, stale, contradictory, and expensive as context.
-3. Users cannot easily audit what one AI learned from another.
-4. Browser-only automation is fragile and may create platform-account risk.
-5. Centralized plaintext storage creates unacceptable privacy exposure.
+## MVP 范围
 
-## MVP scope
+### 包含
 
-### In scope
+- 导入 ChatGPT、Claude 和 Gemini 的官方导出。
+- 标准化会话、消息、附件和来源元数据。
+- 使用 SQLite + FTS5 做本地存储与全文搜索。
+- 对消息和会话做确定性去重。
+- 提取可审阅的记忆候选，并支持确认、修改、过期和删除。
+- 导出前检测常见密钥和敏感字段。
+- 输出 Markdown、JSON 和面向特定平台的上下文包。
 
-- Import ChatGPT, Claude, and Gemini official exports.
-- Normalize conversations, messages, attachments, and source metadata.
-- Store locally in SQLite with FTS5 full-text search.
-- Detect duplicate messages and conversations.
-- Extract memory candidates with explicit lifecycle states.
-- Review, confirm, edit, expire, or delete memory candidates.
-- Detect common secrets and sensitive fields before export.
-- Export portable Markdown and JSON context packages.
-- Generate provider-oriented packages without claiming native restoration.
+### 不包含
 
-### Out of scope
+- 无人值守网页抓取或自动批量发消息。
+- 服务端明文 AI 推理。
+- 第一版的实时双向同步。
+- 强制使用知识图谱或向量数据库。
+- 保存密码、API key、Cookie 或认证令牌。
 
-- Unattended web scraping or automated message sending.
-- Server-side plaintext AI inference.
-- Real-time two-way synchronization.
-- Knowledge graphs or a mandatory vector database.
-- Passwords, API keys, session cookies, or authentication-token storage.
-- Enterprise administration in the first release.
+## 里程碑
 
-## Milestones
+### M0 — 基础（当前）
 
-### M0 — Foundation (current)
+- 确定产品边界和威胁模型。
+- 建立仓库、CLI、SQLite schema 和可测试结构。
+- 验收：用户能初始化本地 vault 并查看状态。
 
-- Product boundaries and threat model.
-- Repository, CI-ready package layout, SQLite schema, CLI bootstrap.
-- Acceptance: a user can initialize a local vault and inspect its status.
+### M1 — 数据转换器
 
-### M1 — Data converter
+- 定义导入适配器接口与 fixture 测试。
+- 依次支持 ChatGPT、Claude、Gemini。
+- 输出标准化 JSON/Markdown 并确定性去重。
+- 验收：不丢失顺序、时间、角色和来源引用。
 
-- Import adapter interface and fixture-driven test suite.
-- ChatGPT export adapter first; Claude and Gemini next.
-- Normalized JSON/Markdown output and deterministic deduplication.
-- Acceptance: supported fixtures round-trip without losing message ordering,
-  timestamps, roles, or source references.
+### M2 — 本地知识库
 
-### M2 — Local knowledge base
+- 增加全文搜索、过滤、项目标签、附件元数据和时间线。
+- 增加记忆确认、敏感信息扫描和导出预览。
+- 验收：完全离线找到历史决策并生成已审阅的项目上下文包。
 
-- FTS5 search, filters, project tags, attachment metadata, and timeline.
-- Memory candidate extraction plus manual confirmation workflow.
-- Secret/sensitivity scanner and export preview.
-- Acceptance: a user can find a prior decision and create a reviewed project
-  context pack without network access.
+### M3 — 浏览器扩展
 
-### M3 — Browser extension
+- 仅提供用户主动触发的保存会话、保存选中消息、搜索与注入。
+- 每个平台独立适配并具备健康检查。
+- 验收：单个平台失效不会影响其他适配器，也不会静默采集。
 
-- Explicit “save conversation” and “save selected messages” actions.
-- Search local history and inject a reviewed context pack.
-- Independent adapters and health checks for each supported website.
-- Acceptance: failures disable only the affected adapter and never capture data
-  silently.
+### M4 — 加密同步
 
-### M4 — Encrypted sync
+- 增加多设备密文同步、版本历史和冲突处理。
+- 使用 Argon2id 派生密钥、XChaCha20-Poly1305 加密 vault 对象。
+- 验收：新设备可恢复并验证 vault，服务器只能看到密文和最少元数据。
 
-- Multi-device encrypted blob sync, version history, and conflict handling.
-- XChaCha20-Poly1305 vault encryption and Argon2id key derivation.
-- Server cannot decrypt vault content; recovery behavior is documented.
-- Acceptance: a fresh device can restore and verify a vault while the server
-  only observes ciphertext and limited operational metadata.
+## 六周验证计划
 
-## Six-week validation plan
+### 第 1–2 周
 
-### Weeks 1–2
+- 完成标准模型与 ChatGPT fixture 导入器。
+- 访谈 8–12 位多 AI 开发者。
+- 衡量重复迁移/搜索痛点和运行本地 CLI 的意愿。
 
-- Implement normalized schema and ChatGPT fixture importer.
-- Interview 8–12 multi-AI developers.
-- Measure: repeated migration/search pain and willingness to run a local CLI.
+### 第 3–4 周
 
-### Weeks 3–4
+- 加入 Claude/Gemini fixture、FTS5 搜索和 Markdown 上下文包。
+- 用至少三个真实导出进行内部测试，私有 fixture 不进入 Git。
+- 衡量导入成功率、重复率、查找时间和导出实用性。
 
-- Add Claude/Gemini fixtures, FTS5 search, and Markdown context packs.
-- Dogfood on at least three real exports with private fixtures kept outside Git.
-- Measure: import success, duplicate rate, time-to-find, and export usefulness.
+### 第 5–6 周
 
-### Weeks 5–6
+- 增加记忆审阅和脱敏预览。
+- 向 10–20 名用户发布私有 alpha。
+- 判断核心需求究竟是备份、迁移、搜索还是上下文注入。
 
-- Add memory review and redaction preview.
-- Release a private alpha to 10–20 users.
-- Measure: weekly retained users, reviewed exports, false-memory corrections,
-  and which job dominates—backup, migration, search, or context injection.
+## 成功标准
 
-## MVP success criteria
+- 至少 90% 的 alpha 导出无需手工修复即可导入。
+- 30 秒内找到已知内容。
+- 未经预览与明确操作，任何内容都不会离开本机。
+- 每条导出记忆可追溯至原始来源。
+- 至少 5 位 alpha 用户在第二周重复使用。
 
-- At least 90% of alpha exports import without manual repair.
-- A known item can be found in under 30 seconds.
-- No content leaves the machine without a preview and explicit action.
-- Every exported memory links back to its source.
-- At least 5 alpha users repeat the workflow in a second week.
+## 主要风险
 
-## Key risks and mitigations
-
-| Risk | Mitigation |
+| 风险 | 应对 |
 |---|---|
-| Vendor format drift | Versioned adapters, fixtures, graceful unsupported reports |
-| Incorrect extracted memories | Candidate-by-default, provenance, confidence, user confirmation |
-| Secret leakage | Local scanning, sensitivity labels, export preview, denylist rules |
-| Browser DOM changes | Isolated adapters, health checks, user-triggered capture only |
-| Platform terms/account risk | Prefer official exports; no cookie reuse or unattended automation |
-| Scope explosion | Ship CLI converter and search before extension or VPS |
+| 平台格式变化 | 版本化适配器、fixture、清晰错误 |
+| 错误记忆 | 默认候选、来源、置信度、人工确认 |
+| 敏感信息泄漏 | 本地扫描、敏感标签、导出预览 |
+| 浏览器 DOM 变化 | 独立适配器、健康检查、用户触发 |
+| 范围膨胀 | 先交付 CLI、转换器和搜索 |
 
-## Early decisions
+## 已确定的技术决策
 
-- Python for CLI and local service; TypeScript for the future extension.
-- SQLite and FTS5 before embeddings or a vector database.
-- Provider adapters at system boundaries; normalized records internally.
-- Browser extension is an incremental capture client, not the source of truth.
-- VPS is a blind encrypted sync service, not the AI-processing core.
+- CLI 和本地服务使用 Python；未来扩展使用 TypeScript。
+- 先使用 SQLite + FTS5，再考虑 embedding 或向量数据库。
+- 平台差异只存在于系统边界的适配器内。
+- 浏览器扩展是增量客户端，不是真相来源。
+- VPS 是盲同步服务，不是 AI 推理核心。
 

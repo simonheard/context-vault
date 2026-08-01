@@ -1,65 +1,71 @@
-# aimem
+# ContextVault
 
-Portable AI memory and context tools. `aimem` turns exports from AI products
-into a local, searchable, auditable context store that the user controls.
+[English](README.en.md)
 
-The product is deliberately narrower than “sync every chat everywhere.” The
-first milestone focuses on stable official exports, a normalized data model,
-local search, redaction, and portable Markdown/JSON packages. Browser capture
-and encrypted multi-device sync come later.
+ContextVault 是一个本地优先、由用户掌控的 AI 上下文库。它把不同 AI 产品的导出
+数据转换成可搜索、可审计、可迁移的统一格式，并让用户在发送给其他 AI 之前明确
+预览和确认内容。
 
-## Product principles
+> 你的 AI 上下文属于你，而不是某个 AI 平台。
 
-- Local-first: parsing, indexing, and review happen on the user's device.
-- Explicit consent: users preview what will be stored or sent to another AI.
-- Traceable memory: every extracted fact keeps source, time, confidence, scope,
-  sensitivity, and lifecycle state.
-- Adapter-based: vendor-specific import and export formats stay isolated.
-- No credentials: store credential references, never secrets.
-- Honest portability: make history searchable and usable as context; do not
-  promise to recreate another provider's native conversation list.
+## 产品边界
 
-## Repository status
+本项目不承诺“自动同步所有聊天”，也不承诺在另一个平台原样恢复会话列表。第一阶段
+聚焦稳定的官方导出、标准化数据模型、本地搜索、敏感信息检查和便携式上下文包。
+浏览器增量捕获与端到端加密多设备同步将在核心流程验证后实现。
 
-This is the planning and bootstrap milestone. It includes:
+## 产品原则
 
-- a zero-dependency Python CLI skeleton;
-- a SQLite vault schema with FTS5 search support;
-- product scope, architecture, risks, and milestones;
-- tests for vault creation and status reporting.
+- **本地优先：** 解析、索引和审阅默认在用户设备完成。
+- **明确授权：** 保存或发送前展示具体内容。
+- **来源可追溯：** 每条记忆保留来源、时间、置信度、作用域、敏感级别与生命周期状态。
+- **适配器隔离：** 平台格式变化不污染内部模型。
+- **不保存凭证：** 只允许记录凭证位置，不保存密码、密钥或会话令牌。
+- **诚实迁移：** 让历史可搜索、可作为上下文使用，而不是承诺原生恢复。
 
-## Quick start
+## 当前状态
 
-Requires Python 3.11+.
+当前是规划与基础骨架阶段，包含：
+
+- 零依赖 Python CLI；
+- 支持 FTS5 的 SQLite vault；
+- 产品路线图、架构与风险说明；
+- vault 初始化与状态测试。
+
+## 快速开始
+
+需要 Python 3.11+。
 
 ```bash
 python3 -m venv .venv
 source .venv/bin/activate
 python3 -m pip install -e .
-aimem init
-aimem status
-aimem doctor
+contextvault init
+contextvault status
+contextvault doctor
 python3 -m unittest discover -s tests
 ```
 
-The default vault is `.aimem/vault.sqlite`. Override it with `--vault PATH`.
+默认 vault 路径为 `.contextvault/vault.sqlite`；可使用 `--vault PATH` 覆盖。
 
-## Initial command roadmap
+## 命令路线图
 
 ```text
-aimem init
-aimem status
-aimem doctor
-aimem import <export.zip> --source chatgpt|claude|gemini
-aimem inspect
-aimem search <query>
-aimem extract-memories
-aimem redact
-aimem export --target markdown|json|claude|gemini|chatgpt
+contextvault init
+contextvault status
+contextvault doctor
+contextvault import <export.zip> --source chatgpt|claude|gemini
+contextvault inspect
+contextvault search <query>
+contextvault extract-memories
+contextvault redact
+contextvault export --target markdown|json|claude|gemini|chatgpt
 ```
 
-Only `init`, `status`, and `doctor` are implemented in this bootstrap.
+当前仅实现 `init`、`status` 和 `doctor`。
 
-See [docs/PRODUCT_PLAN.md](docs/PRODUCT_PLAN.md) and
-[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
+## 文档
+
+- [产品计划](docs/PRODUCT_PLAN.md)
+- [技术架构](docs/ARCHITECTURE.md)
 

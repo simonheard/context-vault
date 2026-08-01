@@ -47,6 +47,7 @@ ChatGPT 历史对话       设备扫描       手动填写       其他数据源
 6. **自动总结：** 生成简版用户简介、完整个人档案、项目资料包或设备环境说明。
 7. **按目标同步：** 对 Gemini、Claude 等目标分别设置同步字段、敏感级别和更新频率。
 8. **隐私优先：** 默认本地处理；高敏感资料和首次跨平台发送必须明确确认。
+9. **敏感同步开关：** 可按 AI 平台和资料类别选择永不发送、每次询问或允许自动同步。
 
 ## 第一版要完成什么
 
@@ -106,6 +107,8 @@ contextvault diff
 contextvault sync add gemini
 contextvault sync preview gemini
 contextvault sync run gemini
+contextvault privacy show
+contextvault privacy set --target gemini --sensitive ask
 contextvault summary --type personal
 contextvault summary --type devices
 ```
@@ -115,4 +118,4 @@ contextvault summary --type devices
 - [产品计划](docs/PRODUCT_PLAN.md)
 - [技术架构](docs/ARCHITECTURE.md)
 - [用户资料与记忆模型](docs/MEMORY_MODEL.md)
-
+- [敏感信息同步与知情同意](docs/PRIVACY_POLICY.md)

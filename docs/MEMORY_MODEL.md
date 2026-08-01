@@ -37,6 +37,13 @@ legal.*             高敏感，默认禁止自动同步
 - `sensitive`：每次跨平台同步需明确确认；
 - `secret`：拒绝存储。
 
+敏感级别描述数据本身；同步模式描述用户对某个目标的授权，两者不能混为一谈。
+
+- `block`：永不发送；
+- `ask`：每次同步前逐项确认；
+- `allow`：在指定目标和类别内允许自动同步；
+- `secret` 数据始终强制 `block`，用户不能覆盖。
+
 ## 自动化规则
 
 - 用户明确说“我现在在 X 工作”且无冲突：一般资料可进入批量确认。
@@ -61,11 +68,15 @@ legal.*             高敏感，默认禁止自动同步
     "device.summary"
   ],
   "max_sensitivity": "personal",
+  "sensitive_mode": "ask",
   "require_preview_on_first_sync": true,
   "auto_sync_low_risk_changes": true,
   "summary_budget_chars": 12000
 }
 ```
+
+开启敏感同步只影响未来操作。撤销授权可以停止后续同步，但无法保证目标 AI 已经忘记此前收到
+的内容；系统应提供发送历史和纠正/删除操作说明。
 
 ## 设备配置边界
 
@@ -74,4 +85,3 @@ legal.*             高敏感，默认禁止自动同步
 
 默认禁止：密码、私钥、API key、Cookie、浏览器 token、环境变量值、Wi-Fi 密码、完整序列号、
 恢复密钥和私密文件内容。
-

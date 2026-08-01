@@ -117,6 +117,11 @@ frequency, and preview policy. The browser extension writes only in a page where
 the user is already signed in and has allowed the action. Cookies are never
 uploaded and the server never impersonates the user.
 
+Sensitive information uses three modes: `block` (never send), `ask` (confirm
+every time), and `allow` (automatic sync within an explicit scope). Policies are
+per provider and category rather than one global switch. `secret` data can never
+be configured as `allow`.
+
 ## MVP
 
 ### MVP 1 — ChatGPT profile extractor
@@ -169,6 +174,7 @@ correct environment.
 - **Profile health:** flag stale, conflicting, unsupported, or unconfirmed claims.
 - **Deterministic extraction:** prefer rules for devices and explicit structured fields.
 - **Optional local model:** extract sensitive data without a cloud model.
+- **Consent receipts:** retain the notice version, categories, target, choice, and revocation time.
 
 ## Success metrics
 
@@ -187,4 +193,4 @@ correct environment.
 4. Every cross-platform write is previewable, traceable, and reversible.
 5. Device configuration and user information belong to one profile but use different collection and sensitivity policies.
 6. Processing is local by default; the server provides only end-to-end encrypted sync.
-
+7. Disclaimers support informed consent; they never replace safety controls or shift all responsibility to the user.

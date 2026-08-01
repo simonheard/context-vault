@@ -5,7 +5,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 
-SCHEMA_VERSION = 2
+SCHEMA_VERSION = 3
 
 
 @dataclass(frozen=True)
@@ -93,6 +93,17 @@ def initialize(path: Path) -> VaultStatus:
                 status TEXT NOT NULL,
                 created_at TEXT NOT NULL,
                 completed_at TEXT
+            );
+
+            CREATE TABLE IF NOT EXISTS consent_receipts (
+                id TEXT PRIMARY KEY,
+                target_id TEXT NOT NULL REFERENCES sync_targets(id) ON DELETE CASCADE,
+                policy_version TEXT NOT NULL,
+                categories_json TEXT NOT NULL,
+                sensitivity_mode TEXT NOT NULL,
+                notice_version TEXT NOT NULL,
+                acknowledged_at TEXT NOT NULL,
+                revoked_at TEXT
             );
 
             CREATE VIRTUAL TABLE IF NOT EXISTS claims_fts USING fts5(

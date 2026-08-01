@@ -38,6 +38,14 @@ legal.*             sensitive; automatic sync disabled by default
 - `sensitive`: explicit confirmation for every cross-platform sync;
 - `secret`: rejected and never stored.
 
+Sensitivity describes the data; sync mode describes the user's authorization
+for one target. They are not the same concept.
+
+- `block`: never send;
+- `ask`: confirm each item before every sync;
+- `allow`: permit automatic sync for the specified target and categories;
+- `secret` is always forced to `block` and cannot be overridden.
+
 ## Automation rules
 
 - An explicit, non-conflicting “I now work at X” may enter batch review.
@@ -62,11 +70,16 @@ legal.*             sensitive; automatic sync disabled by default
     "device.summary"
   ],
   "max_sensitivity": "personal",
+  "sensitive_mode": "ask",
   "require_preview_on_first_sync": true,
   "auto_sync_low_risk_changes": true,
   "summary_budget_chars": 12000
 }
 ```
+
+Enabling sensitive sync affects future operations only. Revocation stops future
+sync but cannot guarantee that an AI provider has forgotten previously received
+data. The system should show send history and correction/deletion guidance.
 
 ## Device configuration boundary
 
@@ -77,4 +90,3 @@ non-sensitive settings.
 Denied by default: passwords, private keys, API keys, cookies, browser tokens,
 environment variable values, Wi-Fi passwords, complete serial numbers, recovery
 keys, and private file contents.
-

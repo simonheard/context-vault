@@ -79,6 +79,11 @@ candidate -> confirmed -> superseded -> expired
 记录某次同步向某个平台发送了哪些 Claim、使用了哪个摘要版本、是否成功，以及后续如何撤销
 或纠正。
 
+### ConsentReceipt
+
+记录用户针对某个目标平台看到的风险提示版本、允许的敏感资料类别、同步模式、确认时间和撤销
+时间。它是知情同意的审计记录，不包含认证凭证，也不能证明目标平台已经删除历史数据。
+
 ## 提取流水线
 
 ```text
@@ -119,6 +124,9 @@ Agent 先生成本地 diff，用户策略决定哪些变化进入标准档案、
 - 上次同步版本。
 
 输出包括完整摘要和变更摘要，并附带机器可读 manifest，列出包含的 Claim ID。
+
+生成器在输出前必须执行策略检查：`block` 字段被移除，`ask` 字段进入确认界面，`allow`
+字段仍需通过秘密扫描和目标平台限制。
 
 ## 同步方式
 
@@ -164,4 +172,3 @@ contextvault/
   storage/       # sqlite, artifacts, migrations
   cli/           # commands and review UI
 ```
-

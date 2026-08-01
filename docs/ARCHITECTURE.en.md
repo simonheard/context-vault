@@ -79,6 +79,13 @@ categories, sensitivity ceiling, summary budget, sync method, and last version.
 Records which claims a sync sent, which summary version it used, whether it
 succeeded, and how it can later be corrected or revoked.
 
+### ConsentReceipt
+
+Records the risk-notice version, allowed sensitive categories, sync mode,
+acknowledgement time, and revocation time for one target. It is an audit record
+of informed consent, contains no authentication credentials, and cannot prove
+that a provider deleted previously received data.
+
 ## Extraction pipeline
 
 ```text
@@ -117,6 +124,10 @@ A summary is a rebuildable view, not the primary storage format. The generator
 accepts a target, use case, allowed categories, sensitivity ceiling, character
 or token budget, and previous sync version. It emits both complete and change
 summaries plus a machine-readable manifest of included claim IDs.
+
+Before output, the generator enforces policy: `block` fields are removed, `ask`
+fields enter confirmation, and `allow` fields still pass secret scanning and
+provider constraints.
 
 ## Sync methods
 
@@ -164,4 +175,3 @@ contextvault/
   storage/       # sqlite, artifacts, migrations
   cli/           # commands and review UI
 ```
-

@@ -51,6 +51,7 @@ ChatGPT history       Device scan       Manual input       Other sources
 6. **Automatic summaries:** Generate a short bio, full profile, project pack, or device environment report.
 7. **Per-target policies:** Choose fields, sensitivity limits, and frequency separately for Gemini, Claude, and other targets.
 8. **Privacy-first:** Process locally by default; require confirmation for sensitive data and first-time cross-platform sharing.
+9. **Sensitive-data controls:** Set never, ask every time, or allow automatic sync separately for each provider and category.
 
 ## First complete workflow
 
@@ -110,6 +111,8 @@ contextvault diff
 contextvault sync add gemini
 contextvault sync preview gemini
 contextvault sync run gemini
+contextvault privacy show
+contextvault privacy set --target gemini --sensitive ask
 contextvault summary --type personal
 contextvault summary --type devices
 ```
@@ -119,4 +122,4 @@ contextvault summary --type devices
 - [Product plan](docs/PRODUCT_PLAN.en.md)
 - [Architecture](docs/ARCHITECTURE.en.md)
 - [Profile and memory model](docs/MEMORY_MODEL.en.md)
-
+- [Sensitive-data sync and informed consent](docs/PRIVACY_POLICY.en.md)

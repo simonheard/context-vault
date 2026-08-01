@@ -1,4 +1,3 @@
-"""Local-first, user-owned AI context vault."""
+"""Personal memory and profile synchronization across AI assistants."""
 
-__version__ = "0.1.0"
-
+__version__ = "0.2.0"

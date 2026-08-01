@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import contextlib
 import io
+import sqlite3
 import tempfile
 import unittest
 from pathlib import Path
@@ -22,8 +23,29 @@ class CliTests(unittest.TestCase):
 
             self.assertEqual(init_code, 0)
             self.assertEqual(status_code, 0)
-            self.assertEqual(status(vault_path).schema_version, 1)
-            self.assertIn("Memories: 0", output.getvalue())
+            self.assertEqual(status(vault_path).schema_version, 2)
+            self.assertIn("Claims: 0", output.getvalue())
+            self.assertIn("Devices: 0", output.getvalue())
+            self.assertIn("Sync targets: 0", output.getvalue())
+
+            with sqlite3.connect(vault_path) as connection:
+                tables = {
+                    row[0]
+                    for row in connection.execute(
+                        "SELECT name FROM sqlite_master WHERE type = 'table'"
+                    )
+                }
+            self.assertTrue(
+                {
+                    "entities",
+                    "claims",
+                    "claim_sources",
+                    "devices",
+                    "sync_targets",
+                    "sync_receipts",
+                    "claims_fts",
+                }.issubset(tables)
+            )
 
     def test_status_reports_missing_vault(self) -> None:
         with tempfile.TemporaryDirectory() as directory:

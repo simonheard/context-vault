@@ -2,119 +2,189 @@
 
 [中文](PRODUCT_PLAN.md)
 
-## Positioning
+## Product definition
 
-ContextVault is a user-owned context layer between AI providers. It moves useful
-history, preferences, decisions, project state, and artifacts without treating
-every raw conversation as permanent truth.
+ContextVault is a personal memory synchronization layer across AI assistants.
+It does not merely answer “where are my chats?” It answers:
 
-The initial target is developers who use multiple AI tools: their pain is clear,
-their data is structured, and they are comfortable with a CLI.
+> What does each AI know about me, what is still true, what may be shared, and
+> how can those profiles stay synchronized automatically?
 
-## Problems to solve
+The system extracts structured information from conversations, official
+exports, local devices, and user input; maintains a canonical personal profile;
+and synchronizes policy-filtered versions to Gemini, Claude, ChatGPT, and future
+tools.
 
-1. Official export formats differ and change.
-2. Raw history is noisy, stale, contradictory, and expensive as context.
-3. Users cannot easily audit what one AI learned from another.
-4. Browser-only automation is fragile and may create account risk.
-5. Centralized plaintext storage creates unacceptable privacy exposure.
+## Typical scenarios
 
-## MVP scope
+### ChatGPT to Gemini
 
-### In scope
+A user has talked with ChatGPT for two years. ContextVault imports that history
+and discovers age, school, major, work, location, languages, response
+preferences, projects, and goals. After one consolidated review, it creates a
+Gemini-ready profile. Later changes are synchronized incrementally.
 
-- Import official exports from ChatGPT, Claude, and Gemini.
-- Normalize conversations, messages, attachments, and source metadata.
-- Use SQLite and FTS5 for local storage and full-text search.
-- Deterministically deduplicate messages and conversations.
-- Extract reviewable memory candidates that can be confirmed, edited, expired, or deleted.
-- Detect common secrets and sensitive fields before export.
-- Export Markdown, JSON, and provider-oriented context packages.
+### Devices and development environments
 
-### Out of scope
+A user owns a MacBook, Windows desktop, VPS, and phone. A local agent records
+models, OS versions, important software, development tools, project locations,
+and approved non-sensitive configuration. When the user asks an AI for help,
+the assistant already knows the correct environment.
 
-- Unattended scraping or automated bulk messaging.
-- Server-side inference over plaintext data.
-- Real-time bidirectional sync in the first release.
-- A mandatory knowledge graph or vector database.
-- Storing passwords, API keys, cookies, or authentication tokens.
+### Information changes
 
-## Milestones
+An old conversation says the user works at Company A; a new one says they have
+joined Company B. The system ends the validity of A, marks B as the candidate
+current employer, and asks for confirmation when necessary.
 
-### M0 — Foundation (current)
+## Personal information coverage
 
-- Define product boundaries and the threat model.
-- Establish the repository, CLI, SQLite schema, and testable package structure.
-- Acceptance: initialize a local vault and inspect its status.
+The first stage supports:
 
-### M1 — Data converter
+- identity: name, age, birthday, languages, timezone, and location;
+- education: school, major, degree, periods, courses, and certificates;
+- employment: company, role, team, responsibilities, work style, and periods;
+- preferences: response, communication, writing, code, food, travel, and shopping;
+- skills and goals: abilities, learning, long-term goals, and plans;
+- projects and decisions: stack, status, important decisions, and tasks;
+- relationships: important people and relationships explicitly confirmed by the user;
+- devices and environments: hardware, OS, software, development environments, network roles, and non-sensitive settings;
+- life events: moves, job changes, graduation, and device purchases.
 
-- Define import adapters and fixture tests.
-- Support ChatGPT, Claude, then Gemini.
-- Produce normalized JSON/Markdown with deterministic deduplication.
-- Acceptance: preserve ordering, timestamps, roles, and source references.
+Medical, financial, legal, precise-address, and government-identifier data may
+be modeled, but is not automatically shared across platforms. Passwords, OTPs,
+private keys, API keys, cookies, and session tokens never enter the profile.
 
-### M2 — Local knowledge base
+## Core loop
 
-- Add search, filters, project tags, attachment metadata, and timeline views.
-- Add memory review, sensitivity scanning, and export preview.
-- Acceptance: find a prior decision and build a reviewed context pack fully offline.
+```text
+collect -> extract candidates -> normalize -> resolve time/conflicts -> policy/review
+  -> canonical profile -> target summary -> sync -> receipt and change history
+```
 
-### M3 — Browser extension
+### Collection
 
-- Provide only user-triggered save, search, and injection actions.
-- Isolate platform adapters and add health checks.
-- Acceptance: one broken adapter does not affect others and capture is never silent.
+- official exports from ChatGPT, Claude, and Gemini;
+- user-approved incremental capture from a browser extension;
+- device information from a CLI/local agent;
+- manual forms, Markdown, JSON, and clipboard input;
+- later: optional calendar, contact, repository, and smart-home connectors.
 
-### M4 — Encrypted sync
+### Extraction and normalization
 
-- Add encrypted multi-device sync, version history, and conflict handling.
-- Use Argon2id and XChaCha20-Poly1305 for vault encryption.
-- Acceptance: a new device restores and verifies a vault while the server sees only ciphertext and minimal metadata.
+Natural language becomes a sourced `Claim`, for example:
 
-## Six-week validation plan
+```text
+entity: user
+attribute: employment.current.company
+value: Example Corp
+source: ChatGPT conversation abc / message 123
+confidence: 0.96
+status: candidate
+sensitivity: private
+validity: 2025-03 to present
+```
 
-### Weeks 1–2
+Age should not be stored permanently as a static number. Prefer birth date or
+birth year and derive age at use time. Employment, education, location, and
+device state also require validity periods.
 
-- Implement the normalized model and ChatGPT fixture importer.
-- Interview 8–12 multi-AI developers.
-- Measure repeated pain and willingness to run a local CLI.
+### Review and policy
 
-### Weeks 3–4
+Not every item requires individual confirmation:
 
-- Add Claude and Gemini fixtures, FTS5 search, and Markdown context packs.
-- Dogfood at least three real exports; keep private fixtures outside Git.
-- Measure import success, duplicate rate, time-to-find, and export usefulness.
+- low-risk, explicitly stated claims may be auto-confirmed;
+- ordinary personal data can be reviewed in batches;
+- inferred, conflicting, or sensitive claims require confirmation;
+- credentials and secrets are rejected.
 
-### Weeks 5–6
+### Automatic summaries
 
-- Add memory review and redaction preview.
-- Release a private alpha to 10–20 users.
-- Determine whether the dominant job is backup, migration, search, or context injection.
+The same canonical profile can produce:
 
-## Success criteria
+- a 100–200 word essential bio;
+- a complete personal profile;
+- current work and skills;
+- a project context pack;
+- a device and development environment inventory;
+- a change digest since the previous sync;
+- provider-specific packages for Gemini, Claude, and ChatGPT.
 
-- At least 90% of alpha exports import without manual repair.
-- Find a known item within 30 seconds.
-- Nothing leaves the machine without preview and explicit action.
-- Every exported memory links to its source.
-- At least five alpha users repeat the workflow in week two.
+### Synchronization
 
-## Key risks
+Each target has its own allowed categories, sensitivity ceiling, size limit,
+frequency, and preview policy. The browser extension writes only in a page where
+the user is already signed in and has allowed the action. Cookies are never
+uploaded and the server never impersonates the user.
 
-| Risk | Mitigation |
-|---|---|
-| Provider format drift | Versioned adapters, fixtures, and clear errors |
-| Incorrect memories | Candidate-by-default, provenance, confidence, and confirmation |
-| Secret leakage | Local scanning, sensitivity labels, and export preview |
-| Browser DOM changes | Isolated adapters, health checks, and user-triggered capture |
-| Scope growth | Ship the CLI, converter, and search first |
+## MVP
 
-## Early technical decisions
+### MVP 1 — ChatGPT profile extractor
 
-- Python for the CLI and local service; TypeScript for the future extension.
-- SQLite and FTS5 before embeddings or a vector database.
-- Keep provider differences in boundary adapters.
-- The browser extension is an incremental client, not the source of truth.
-- The VPS is a blind sync service, not the inference core.
+- Parse ChatGPT official exports.
+- Extract identity, education, employment, location, preferences, skills, projects, and devices.
+- Display provenance, confidence, conflicts, and validity.
+- Let users confirm in batches.
+- Export canonical JSON and readable Markdown.
+
+Acceptance: produce a useful, traceable profile from years of chat history in
+under 15 minutes.
+
+### MVP 2 — Gemini sync
+
+- Generate a Gemini-optimized summary.
+- Provide sync preview and field filters.
+- Synchronize through user-triggered copy, file import, or browser injection.
+- Record sync versions and changes.
+
+Acceptance: Gemini correctly uses approved profile facts and preferences while
+receiving none of the prohibited fields.
+
+### MVP 3 — Device agent
+
+- Scan model, CPU, memory, OS, package managers, key software, and development tools.
+- Configure which paths and settings may be synchronized.
+- Deduplicate devices and track last-seen time and changes.
+- Generate inventory and troubleshooting environment summaries.
+
+Acceptance: an AI distinguishes the user's devices and gives advice for the
+correct environment.
+
+### MVP 4 — Incremental automatic sync
+
+- Capture explicitly allowed new messages through the extension.
+- Extract incrementally and detect changes.
+- Auto-sync low-risk fields according to policy.
+- Route conflicts and sensitive changes to review.
+- Add end-to-end encrypted multi-device synchronization.
+
+## Later capabilities
+
+- **Relationship and family graph:** only user-confirmed important relationships.
+- **Timeline:** education, employment, residence, device, and project changes.
+- **Reversible sync:** track what was sent where and generate correction/deletion instructions.
+- **Multiple identity modes:** personal, work, client, and anonymous profiles.
+- **Context views:** send only the subset relevant to the current task.
+- **Right to be forgotten:** local deletion, correction requests, tombstones, and backup cleanup.
+- **Profile health:** flag stale, conflicting, unsupported, or unconfirmed claims.
+- **Deterministic extraction:** prefer rules for devices and explicit structured fields.
+- **Optional local model:** extract sensitive data without a cloud model.
+
+## Success metrics
+
+- More than 95% accuracy among confirmed extracted claims.
+- More than 90% of claims link to an original message or device scan.
+- Less than 15 minutes from import to the first Gemini package.
+- Fewer than 20% of incremental candidates require manual work.
+- No credential-class secret is stored.
+- Users can clearly answer “which platform knows which information about me?”
+
+## Product principles
+
+1. The canonical profile is the source of truth; chats are evidence.
+2. Automation depends on risk rather than being universally on or off.
+3. New information must be able to expire old information.
+4. Every cross-platform write is previewable, traceable, and reversible.
+5. Device configuration and user information belong to one profile but use different collection and sensitivity policies.
+6. Processing is local by default; the server provides only end-to-end encrypted sync.
 

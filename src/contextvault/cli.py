@@ -14,7 +14,8 @@ DEFAULT_VAULT = Path(".contextvault/vault.sqlite")
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
-        prog="contextvault", description="Local-first, user-owned AI context vault"
+        prog="contextvault",
+        description="Personal memory and profile sync across AI assistants",
     )
     parser.add_argument("--version", action="version", version=__version__)
     parser.add_argument(
@@ -39,7 +40,9 @@ def main(argv: list[str] | None = None) -> int:
             vault_status = status(args.vault)
             print(f"Vault: {vault_status.path}")
             print(f"Schema version: {vault_status.schema_version}")
-            print(f"Memories: {vault_status.memory_count}")
+            print(f"Claims: {vault_status.claim_count}")
+            print(f"Devices: {vault_status.device_count}")
+            print(f"Sync targets: {vault_status.sync_target_count}")
             return 0
         if args.command == "doctor":
             sqlite_version = sqlite3.sqlite_version
@@ -65,4 +68,3 @@ def _has_fts5() -> bool:
 
 if __name__ == "__main__":
     raise SystemExit(main())
-

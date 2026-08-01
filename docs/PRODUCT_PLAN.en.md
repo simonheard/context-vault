@@ -15,6 +15,10 @@ exports, local devices, and user input; maintains a canonical personal profile;
 and synchronizes policy-filtered versions to Gemini, Claude, ChatGPT, and future
 tools.
 
+Multiple personal, work, or client accounts on the same provider are identified
+separately. Data moves through explicit `source account -> identity space ->
+target account` routes and is not mixed across spaces by default.
+
 ## Typical scenarios
 
 ### ChatGPT to Gemini
@@ -169,6 +173,7 @@ correct environment.
 - **Timeline:** education, employment, residence, device, and project changes.
 - **Reversible sync:** track what was sent where and generate correction/deletion instructions.
 - **Multiple identity modes:** personal, work, client, and anonymous profiles.
+- **Multi-account routing:** manage source, consent, receipts, and corrections separately for each provider account.
 - **Context views:** send only the subset relevant to the current task.
 - **Right to be forgotten:** local deletion, correction requests, tombstones, and backup cleanup.
 - **Profile health:** flag stale, conflicting, unsupported, or unconfirmed claims.

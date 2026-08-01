@@ -23,9 +23,12 @@ class CliTests(unittest.TestCase):
 
             self.assertEqual(init_code, 0)
             self.assertEqual(status_code, 0)
-            self.assertEqual(status(vault_path).schema_version, 3)
+            self.assertEqual(status(vault_path).schema_version, 4)
             self.assertIn("Claims: 0", output.getvalue())
             self.assertIn("Devices: 0", output.getvalue())
+            self.assertIn("Provider accounts: 0", output.getvalue())
+            self.assertIn("Profile spaces: 0", output.getvalue())
+            self.assertIn("Sync routes: 0", output.getvalue())
             self.assertIn("Sync targets: 0", output.getvalue())
 
             with sqlite3.connect(vault_path) as connection:
@@ -41,7 +44,11 @@ class CliTests(unittest.TestCase):
                     "claims",
                     "claim_sources",
                     "devices",
+                    "provider_accounts",
+                    "profile_spaces",
+                    "claim_spaces",
                     "sync_targets",
+                    "sync_routes",
                     "sync_receipts",
                     "consent_receipts",
                     "claims_fts",

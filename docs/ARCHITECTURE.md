@@ -71,8 +71,18 @@ candidate -> confirmed -> superseded -> expired
 
 ### SyncTarget
 
-目标平台及账号标签，不保存登录凭证。保存允许类别、敏感级别、摘要预算、同步方式、上次同步
-版本和时间。
+目标平台账号的同步配置，不保存登录凭证。它引用 `ProviderAccount`，保存允许类别、敏感级别、
+摘要预算、同步方式、上次同步版本和时间。
+
+### ProviderAccount
+
+一个平台账号的本地引用，包含平台、本地标签、可选的不可逆账号标识 hash 和状态。所有来源证据、
+同步目标、授权和回执都必须绑定具体账号。
+
+### ProfileSpace 与 SyncRoute
+
+`ProfileSpace` 隔离个人、工作、客户和匿名资料；`SyncRoute` 明确来源账号、使用的空间和目标账号。
+新账号默认没有 route，工作空间默认不能流向个人账号。
 
 ### SyncReceipt
 

@@ -52,6 +52,7 @@ ChatGPT history       Device scan       Manual input       Other sources
 7. **Per-target policies:** Choose fields, sensitivity limits, and frequency separately for Gemini, Claude, and other targets.
 8. **Privacy-first:** Process locally by default; require confirmation for sensitive data and first-time cross-platform sharing.
 9. **Sensitive-data controls:** Set never, ask every time, or allow automatic sync separately for each provider and category.
+10. **Multi-account isolation:** Route personal, work, and client accounts separately to prevent data mixing.
 
 ## First complete workflow
 
@@ -113,6 +114,8 @@ contextvault sync preview gemini
 contextvault sync run gemini
 contextvault privacy show
 contextvault privacy set --target gemini --sensitive ask
+contextvault accounts list
+contextvault routes preview <route>
 contextvault summary --type personal
 contextvault summary --type devices
 ```
@@ -123,3 +126,5 @@ contextvault summary --type devices
 - [Architecture](docs/ARCHITECTURE.en.md)
 - [Profile and memory model](docs/MEMORY_MODEL.en.md)
 - [Sensitive-data sync and informed consent](docs/PRIVACY_POLICY.en.md)
+- [Multi-account design](docs/MULTI_ACCOUNT.en.md)
+- [Design recommendations and priorities](docs/DESIGN_RECOMMENDATIONS.en.md)

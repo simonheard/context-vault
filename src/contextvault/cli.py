@@ -42,6 +42,9 @@ def main(argv: list[str] | None = None) -> int:
             print(f"Schema version: {vault_status.schema_version}")
             print(f"Claims: {vault_status.claim_count}")
             print(f"Devices: {vault_status.device_count}")
+            print(f"Provider accounts: {vault_status.account_count}")
+            print(f"Profile spaces: {vault_status.profile_space_count}")
+            print(f"Sync routes: {vault_status.sync_route_count}")
             print(f"Sync targets: {vault_status.sync_target_count}")
             return 0
         if args.command == "doctor":

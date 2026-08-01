@@ -71,8 +71,21 @@ usernames, and paths require sensitivity policies.
 
 ### SyncTarget
 
-A target provider and account label without login credentials. It stores allowed
-categories, sensitivity ceiling, summary budget, sync method, and last version.
+A synchronization configuration for one provider account without login
+credentials. It references `ProviderAccount` and stores allowed categories,
+sensitivity ceiling, summary budget, sync method, and last version.
+
+### ProviderAccount
+
+A local reference containing provider, local label, optional irreversible
+account-identifier hash, and status. Evidence, targets, consent, and receipts
+always bind to a specific account.
+
+### ProfileSpace and SyncRoute
+
+`ProfileSpace` isolates personal, work, client, and anonymous data. `SyncRoute`
+defines source account, space, and destination account. A new account has no
+route by default, and work spaces cannot flow to personal accounts by default.
 
 ### SyncReceipt
 

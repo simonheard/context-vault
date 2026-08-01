@@ -5,7 +5,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 
-SCHEMA_VERSION = 3
+SCHEMA_VERSION = 4
 
 
 @dataclass(frozen=True)
@@ -14,6 +14,9 @@ class VaultStatus:
     schema_version: int
     claim_count: int
     device_count: int
+    account_count: int
+    profile_space_count: int
+    sync_route_count: int
     sync_target_count: int
 
 
@@ -58,6 +61,7 @@ def initialize(path: Path) -> VaultStatus:
             CREATE TABLE IF NOT EXISTS claim_sources (
                 id TEXT PRIMARY KEY,
                 claim_id TEXT NOT NULL REFERENCES claims(id) ON DELETE CASCADE,
+                account_id TEXT REFERENCES provider_accounts(id) ON DELETE SET NULL,
                 source_type TEXT NOT NULL,
                 platform TEXT,
                 conversation_id TEXT,
@@ -65,6 +69,32 @@ def initialize(path: Path) -> VaultStatus:
                 device_scan_id TEXT,
                 evidence_hash TEXT,
                 observed_at TEXT NOT NULL
+            );
+
+            CREATE TABLE IF NOT EXISTS provider_accounts (
+                id TEXT PRIMARY KEY,
+                platform TEXT NOT NULL,
+                account_label TEXT NOT NULL,
+                external_account_hash TEXT,
+                status TEXT NOT NULL DEFAULT 'active',
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL,
+                UNIQUE(platform, account_label)
+            );
+
+            CREATE TABLE IF NOT EXISTS profile_spaces (
+                id TEXT PRIMARY KEY,
+                name TEXT NOT NULL UNIQUE,
+                display_name TEXT NOT NULL,
+                is_default INTEGER NOT NULL DEFAULT 0 CHECK (is_default IN (0, 1)),
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL
+            );
+
+            CREATE TABLE IF NOT EXISTS claim_spaces (
+                claim_id TEXT NOT NULL REFERENCES claims(id) ON DELETE CASCADE,
+                space_id TEXT NOT NULL REFERENCES profile_spaces(id) ON DELETE CASCADE,
+                PRIMARY KEY (claim_id, space_id)
             );
 
             CREATE TABLE IF NOT EXISTS devices (
@@ -78,11 +108,21 @@ def initialize(path: Path) -> VaultStatus:
 
             CREATE TABLE IF NOT EXISTS sync_targets (
                 id TEXT PRIMARY KEY,
-                platform TEXT NOT NULL,
-                account_label TEXT,
+                account_id TEXT NOT NULL REFERENCES provider_accounts(id) ON DELETE CASCADE,
                 enabled INTEGER NOT NULL DEFAULT 1 CHECK (enabled IN (0, 1)),
                 policy_json TEXT NOT NULL DEFAULT '{}',
                 last_synced_at TEXT
+            );
+
+            CREATE TABLE IF NOT EXISTS sync_routes (
+                id TEXT PRIMARY KEY,
+                source_account_id TEXT REFERENCES provider_accounts(id) ON DELETE SET NULL,
+                space_id TEXT NOT NULL REFERENCES profile_spaces(id) ON DELETE CASCADE,
+                target_id TEXT NOT NULL REFERENCES sync_targets(id) ON DELETE CASCADE,
+                enabled INTEGER NOT NULL DEFAULT 1 CHECK (enabled IN (0, 1)),
+                policy_json TEXT NOT NULL DEFAULT '{}',
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL
             );
 
             CREATE TABLE IF NOT EXISTS sync_receipts (
@@ -130,13 +170,29 @@ def status(path: Path) -> VaultStatus:
         ).fetchone()
         claim_row = connection.execute("SELECT COUNT(*) FROM claims").fetchone()
         device_row = connection.execute("SELECT COUNT(*) FROM devices").fetchone()
+        account_row = connection.execute(
+            "SELECT COUNT(*) FROM provider_accounts"
+        ).fetchone()
+        space_row = connection.execute("SELECT COUNT(*) FROM profile_spaces").fetchone()
+        route_row = connection.execute("SELECT COUNT(*) FROM sync_routes").fetchone()
         target_row = connection.execute("SELECT COUNT(*) FROM sync_targets").fetchone()
-    if None in (version_row, claim_row, device_row, target_row):
+    if None in (
+        version_row,
+        claim_row,
+        device_row,
+        account_row,
+        space_row,
+        route_row,
+        target_row,
+    ):
         raise ValueError(f"Not a valid ContextVault vault: {path}")
     return VaultStatus(
         path,
         int(version_row[0]),
         int(claim_row[0]),
         int(device_row[0]),
+        int(account_row[0]),
+        int(space_row[0]),
+        int(route_row[0]),
         int(target_row[0]),
     )

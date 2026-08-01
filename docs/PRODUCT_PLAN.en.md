@@ -59,6 +59,12 @@ Medical, financial, legal, precise-address, and government-identifier data may
 be modeled, but is not automatically shared across platforms. Passwords, OTPs,
 private keys, API keys, cookies, and session tokens never enter the profile.
 
+Attachments use a reference model. The database stores provider account, file
+ID, conversation provenance, metadata, status, and optional user-approved
+extracted text. Original files remain hosted by ChatGPT, Gemini, Claude, or the
+source provider; ContextVault does not provide default object storage or an
+independent attachment backup.
+
 ## Core loop
 
 ```text
@@ -145,6 +151,7 @@ under 15 minutes.
 - Provide sync preview and field filters.
 - Synchronize through user-triggered copy, file import, or browser injection.
 - Record sync versions and changes.
+- Support reference-only, extracted-text, and user-triggered transient transfer modes for attachments.
 
 Acceptance: Gemini correctly uses approved profile facts and preferences while
 receiving none of the prohibited fields.
@@ -180,6 +187,7 @@ correct environment.
 - **Deterministic extraction:** prefer rules for devices and explicit structured fields.
 - **Optional local model:** extract sensitive data without a cloud model.
 - **Consent receipts:** retain the notice version, categories, target, choice, and revocation time.
+- **Optional external backup:** later connect user-owned S3, WebDAV, or Drive without making it the default attachment store.
 
 ## Success metrics
 

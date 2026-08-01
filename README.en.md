@@ -54,6 +54,7 @@ ChatGPT history       Device scan       Manual input       Other sources
 9. **Sensitive-data controls:** Set never, ask every time, or allow automatic sync separately for each provider and category.
 10. **Multi-account isolation:** Route personal, work, and client accounts separately to prevent data mixing.
 11. **Local management UI:** Manage profiles, accounts, spaces, devices, privacy, and sync history in one simple dashboard.
+12. **Attachment references:** Store metadata, provider references, and optional extracted text without retaining original files.
 
 ## First complete workflow
 
@@ -131,3 +132,4 @@ contextvault summary --type devices
 - [Multi-account design](docs/MULTI_ACCOUNT.en.md)
 - [Design recommendations and priorities](docs/DESIGN_RECOMMENDATIONS.en.md)
 - [Local management UI](docs/GUI.en.md)
+- [Attachment references and cross-AI handling](docs/ATTACHMENTS.en.md)

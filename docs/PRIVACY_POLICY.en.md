@@ -91,6 +91,7 @@ The preview shows:
 - separate confirmation for `ask` categories;
 - fields blocked or redacted by policy;
 - the final text or file the target will receive;
+- whether each attachment uses reference, extracted-text, or transient-transfer mode;
 - previous sync time and version diff.
 
 ## Revocation and correction
@@ -102,6 +103,7 @@ After revocation:
 - preserve immutable consent and sync audit records;
 - generate provider-specific correction or deletion guidance;
 - never claim remote deletion unless the provider confirms it.
+- delete transient transfer files after success or failure.
 
 ## Re-consent triggers
 
@@ -111,4 +113,3 @@ After revocation:
 - a material change to the risk notice or provider data policy;
 - re-enabling after a long inactive period;
 - materially expanding scope or automation.
-

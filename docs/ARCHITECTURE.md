@@ -148,25 +148,34 @@ Agent 先生成本地 diff，用户策略决定哪些变化进入标准档案、
 4. 浏览器扩展在用户已登录页面中注入；
 5. 不支持服务器保存 Cookie 后模拟登录。
 
+## 附件处理
+
+ContextVault 不长期保存附件二进制。`AttachmentRef` 绑定来源 `ProviderAccount`、平台文件 ID、
+会话和消息，并保存文件名、类型、大小、可选 hash、说明、访问状态和可选提取文本。远程 URL
+只是临时定位信息，不是附件的永久身份。
+
+跨平台处理支持：只同步附件引用、同步用户批准的提取文本、用户触发的即时转传。即时转传只在
+内存或临时目录短暂停留，完成后删除；数据库仍然只保存文本、引用和同步回执。
+
 ## 本地存储
 
 ```text
 .contextvault/
   vault.sqlite
   sources/<source-id>/manifest.json
-  artifacts/<sha256-prefix>/<sha256>
   summaries/<target>/<version>.md
   sync-receipts/<target>/<version>.json
   config.toml
 ```
 
-SQLite 负责实体、Claim、设备、目标、版本、FTS 和关系。附件使用内容寻址存储。后续向量索引
-是可重建缓存，不是真相来源。
+SQLite 负责实体、Claim、设备、目标、版本、FTS、关系、附件引用和可选提取文本。原始附件由
+AI 提供商托管。后续向量索引是可重建缓存，不是真相来源。
 
 ## 加密与服务器
 
 默认完全本地。多设备同步阶段使用每个 vault 的随机密钥和 XChaCha20-Poly1305；用户秘密经
-Argon2id 派生包装密钥。服务器只保存密文对象、版本和最少路由元数据，不能读取个人资料。
+Argon2id 派生包装密钥。服务器只保存加密文本事件、版本和最少路由元数据，不保存原始附件，
+也不能读取个人资料。
 
 ## 模块建议
 
@@ -179,6 +188,7 @@ contextvault/
   summaries/     # personal, work, project, devices
   targets/       # gemini, claude, chatgpt
   device_agent/  # platform scanners and allowlists
-  storage/       # sqlite, artifacts, migrations
+  attachments/   # provider references, extraction, transient transfer
+  storage/       # sqlite, text events, migrations
   cli/           # commands and review UI
 ```

@@ -62,6 +62,14 @@ The current implementation provides:
 - collection allowlists;
 - explicit display of rejected secret categories.
 
+### Attachment references
+
+- group attachments by source AI account;
+- distinguish known references from current-device access;
+- show active, reauthentication, expired, missing, and denied states;
+- choose reference-only, extracted-text, or transient-transfer mode;
+- provide no default cloud file repository.
+
 ### Privacy and consent
 
 - global sensitive-sync control;
@@ -83,4 +91,3 @@ The current implementation provides:
 - never read or display passwords, cookies, or tokens;
 - require authentication, TLS, and CSRF protection before any LAN access;
 - never expose the local console directly as a public multi-user SaaS.
-

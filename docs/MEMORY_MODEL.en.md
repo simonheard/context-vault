@@ -28,7 +28,12 @@ event.*             moves, jobs, graduation, device purchases
 health.*            sensitive; automatic sync disabled by default
 finance.*           sensitive; automatic sync disabled by default
 legal.*             sensitive; automatic sync disabled by default
+attachment.*        provider reference, description, status, optional extracted text
 ```
+
+An attachment is not a binary Claim value. A Claim may reference an
+`AttachmentRef`; the database stores text and references while the source AI
+provider continues to host the original file.
 
 ## Sensitivity levels
 

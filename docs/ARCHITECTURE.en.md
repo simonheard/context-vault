@@ -152,27 +152,40 @@ In order of stability:
 4. Browser injection on a page where the user is already signed in.
 5. Never store cookies on a server to impersonate the user.
 
+## Attachment handling
+
+ContextVault does not retain attachment binaries. `AttachmentRef` binds a source
+`ProviderAccount`, provider file ID, conversation, and message, plus filename,
+type, size, optional hash, description, access status, and optional extracted
+text. A remote URL is an ephemeral locator rather than permanent identity.
+
+Cross-provider handling supports reference-only sync, user-approved extracted
+text, and user-triggered transient transfer. Transient files exist only in
+memory or a temporary directory and are deleted after transfer. The database
+continues to store only text, references, and receipts.
+
 ## Local storage
 
 ```text
 .contextvault/
   vault.sqlite
   sources/<source-id>/manifest.json
-  artifacts/<sha256-prefix>/<sha256>
   summaries/<target>/<version>.md
   sync-receipts/<target>/<version>.json
   config.toml
 ```
 
-SQLite stores entities, claims, devices, targets, versions, search, and
-relationships. Attachments use content-addressed storage. A future vector index
-is a rebuildable cache rather than the source of truth.
+SQLite stores entities, claims, devices, targets, versions, search,
+relationships, attachment references, and optional extracted text. Original
+attachments remain hosted by AI providers. A future vector index is a
+rebuildable cache rather than the source of truth.
 
 ## Encryption and server
 
 The default is fully local. Multi-device sync uses a random vault key and
 XChaCha20-Poly1305; Argon2id derives a wrapping key from the user secret. The
-server stores ciphertext objects, versions, and minimal routing metadata only.
+server stores encrypted text events, versions, and minimal routing metadata
+only. It stores no original attachment files.
 
 ## Suggested modules
 
@@ -185,6 +198,7 @@ contextvault/
   summaries/     # personal, work, project, devices
   targets/       # gemini, claude, chatgpt
   device_agent/  # platform scanners and allowlists
-  storage/       # sqlite, artifacts, migrations
+  attachments/   # provider references, extraction, transient transfer
+  storage/       # sqlite, text events, migrations
   cli/           # commands and review UI
 ```

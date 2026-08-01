@@ -72,6 +72,6 @@ def status(path: Path) -> VaultStatus:
         ).fetchone()
         count_row = connection.execute("SELECT COUNT(*) FROM memories").fetchone()
     if version_row is None or count_row is None:
-        raise ValueError(f"Not a valid aimem vault: {path}")
+        raise ValueError(f"Not a valid ContextVault vault: {path}")
     return VaultStatus(path, int(version_row[0]), int(count_row[0]))
 

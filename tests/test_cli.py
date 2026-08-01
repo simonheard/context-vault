@@ -6,8 +6,8 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from aimem.cli import main
-from aimem.vault import status
+from contextvault.cli import main
+from contextvault.vault import status
 
 
 class CliTests(unittest.TestCase):

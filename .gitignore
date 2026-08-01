@@ -6,6 +6,5 @@ __pycache__/
 dist/
 build/
 *.egg-info/
-.aimem/
+.contextvault/
 .DS_Store
-

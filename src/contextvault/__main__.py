@@ -1,4 +1,4 @@
-from aimem.cli import main
+from contextvault.cli import main
 
 
 if __name__ == "__main__":

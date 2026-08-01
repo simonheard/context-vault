@@ -3,9 +3,9 @@ requires = ["setuptools>=68"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "aimem"
+name = "context-vault"
 version = "0.1.0"
-description = "Local-first portable AI memory and context tools"
+description = "Local-first, user-owned AI context vault"
 readme = "README.md"
 requires-python = ">=3.11"
 license = {text = "MIT"}
@@ -13,8 +13,7 @@ authors = [{name = "Simon Heard"}]
 dependencies = []
 
 [project.scripts]
-aimem = "aimem.cli:main"
+contextvault = "contextvault.cli:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]
-

@@ -1,0 +1,121 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="color-scheme" content="light">
+    <title>ContextVault 管理后台</title>
+    <link rel="stylesheet" href="/styles.css">
+  </head>
+  <body>
+    <div class="app-shell">
+      <aside class="sidebar">
+        <div class="brand">
+          <span class="brand-mark">CV</span>
+          <span><strong>ContextVault</strong><small>个人记忆同步</small></span>
+        </div>
+        <nav aria-label="主导航">
+          <button class="nav-item active" data-view="overview">总览</button>
+          <button class="nav-item" data-view="profile">用户资料</button>
+          <button class="nav-item" data-view="accounts">AI 账号</button>
+          <button class="nav-item" data-view="spaces">身份空间</button>
+          <button class="nav-item" data-view="routes">同步路线</button>
+          <button class="nav-item" data-view="devices">设备</button>
+          <button class="nav-item" data-view="privacy">隐私与授权</button>
+          <button class="nav-item" data-view="history">同步历史</button>
+        </nav>
+        <div class="local-badge"><span></span>仅本机访问</div>
+      </aside>
+
+      <main>
+        <header class="topbar">
+          <div>
+            <p class="eyebrow">PERSONAL AI MEMORY</p>
+            <h1 id="page-title">资料总览</h1>
+          </div>
+          <div class="top-actions">
+            <span class="vault-state">Vault 已连接</span>
+            <button class="primary" data-view-target="profile">审阅候选资料</button>
+          </div>
+        </header>
+
+        <section class="view active" id="overview-view">
+          <div class="notice warning" id="review-notice">
+            <div><strong>需要你的确认</strong><p>候选资料与敏感变更不会在未确认时自动同步。</p></div>
+            <button class="text-button" data-view-target="profile">查看队列</button>
+          </div>
+          <div class="metrics">
+            <article><span>已确认资料</span><strong id="metric-claims">0</strong><small>标准个人档案</small></article>
+            <article><span>待审阅</span><strong id="metric-candidates">0</strong><small>候选与冲突</small></article>
+            <article><span>AI 账号</span><strong id="metric-accounts">0</strong><small>个人与工作隔离</small></article>
+            <article><span>设备</span><strong id="metric-devices">0</strong><small>已允许采集</small></article>
+          </div>
+          <div class="grid two-columns">
+            <article class="panel">
+              <div class="panel-heading"><div><p class="eyebrow">PROFILE HEALTH</p><h2>资料健康度</h2></div><span class="score">—</span></div>
+              <div class="empty-state"><strong>等待第一份资料</strong><p>导入 ChatGPT 数据后，这里会显示完整度、冲突和过期提醒。</p></div>
+            </article>
+            <article class="panel">
+              <div class="panel-heading"><div><p class="eyebrow">SYNC STATUS</p><h2>各个 AI 知道什么</h2></div></div>
+              <div id="account-summary" class="empty-state"><strong>尚未添加 AI 账号</strong><p>添加个人或工作账号后，可以建立独立同步路线。</p></div>
+            </article>
+          </div>
+          <article class="panel timeline-panel">
+            <div class="panel-heading"><div><p class="eyebrow">RECENT CHANGES</p><h2>最近变化</h2></div><button class="text-button" data-view-target="history">全部历史</button></div>
+            <div class="empty-state compact"><strong>还没有同步记录</strong><p>未来的新增、修改、过期和纠正操作会显示在这里。</p></div>
+          </article>
+        </section>
+
+        <section class="view" id="profile-view">
+          <div class="section-intro"><div><h2>用户资料</h2><p>候选资料经过确认后才进入标准档案。</p></div><button class="primary" disabled>导入 ChatGPT 数据</button></div>
+          <article class="panel"><div class="empty-state tall"><strong>暂无资料候选</strong><p>导入功能将在下一阶段实现。这里将提供来源、置信度、时间和敏感级别审阅。</p></div></article>
+        </section>
+
+        <section class="view" id="accounts-view">
+          <div class="section-intro"><div><h2>AI 账号</h2><p>个人、工作和客户账号分别管理，不共享授权。</p></div></div>
+          <div class="grid form-layout">
+            <article class="panel">
+              <h3>已连接账号</h3>
+              <div id="accounts-list" class="list"><p class="muted">正在读取…</p></div>
+            </article>
+            <article class="panel">
+              <h3>添加本地账号引用</h3>
+              <form id="account-form">
+                <label>平台<select name="platform"><option value="chatgpt">ChatGPT</option><option value="gemini">Gemini</option><option value="claude">Claude</option><option value="other">其他</option></select></label>
+                <label>本地标签<input name="label" maxlength="80" placeholder="例如：个人 Gemini" required></label>
+                <p class="form-hint">这里只保存标签，不保存密码、Cookie 或 token。</p>
+                <button class="primary" type="submit">添加账号</button>
+                <p class="form-message" id="account-message" role="status"></p>
+              </form>
+            </article>
+          </div>
+        </section>
+
+        <section class="view" id="spaces-view">
+          <div class="section-intro"><div><h2>身份空间</h2><p>隔离个人、工作、客户和匿名资料。</p></div></div>
+          <div class="grid form-layout">
+            <article class="panel"><h3>现有空间</h3><div id="spaces-list" class="list"><p class="muted">正在读取…</p></div></article>
+            <article class="panel"><h3>创建空间</h3><form id="space-form"><label>内部名称<input name="name" placeholder="work" required></label><label>显示名称<input name="display_name" placeholder="工作" required></label><button class="primary" type="submit">创建空间</button><p class="form-message" id="space-message" role="status"></p></form></article>
+          </div>
+        </section>
+
+        <section class="view" id="routes-view"><div class="section-intro"><div><h2>同步路线</h2><p>明确来源账号、身份空间和目标账号。</p></div></div><article class="panel"><div class="empty-state tall"><strong>尚未建立同步路线</strong><p>添加至少两个账号后，可以设置个人 ChatGPT → 个人 Gemini 等路线。</p></div></article></section>
+        <section class="view" id="devices-view"><div class="section-intro"><div><h2>设备</h2><p>只采集你允许的硬件、系统、软件和非敏感配置。</p></div></div><article class="panel"><div class="empty-state tall"><strong>暂无设备</strong><p>设备 Agent 将在本地生成扫描预览，不会读取密钥或认证文件。</p></div></article></section>
+
+        <section class="view" id="privacy-view">
+          <div class="section-intro"><div><h2>隐私与授权</h2><p>敏感信息默认关闭，授权按账号和类别管理。</p></div></div>
+          <article class="panel privacy-card"><div><span class="status-dot safe"></span><strong>敏感信息自动同步</strong><p>当前关闭。秘密级别数据始终禁止保存和发送。</p></div><button class="secondary" disabled>配置策略</button></article>
+          <div class="grid three-columns">
+            <article class="policy block"><span>BLOCK</span><h3>永不发送</h3><p>健康、财务、法律等资料被策略移除。</p></article>
+            <article class="policy ask"><span>ASK</span><h3>每次询问</h3><p>同步前逐项展示并要求确认。</p></article>
+            <article class="policy allow"><span>ALLOW</span><h3>允许自动同步</h3><p>仅限指定账号、类别和明确范围。</p></article>
+          </div>
+        </section>
+
+        <section class="view" id="history-view"><div class="section-intro"><div><h2>同步历史</h2><p>每次同步、授权、纠正和撤销都有记录。</p></div></div><article class="panel"><div class="empty-state tall"><strong>暂无历史记录</strong><p>完成首次同步后，这里会显示目标账号、资料版本和发送 manifest。</p></div></article></section>
+      </main>
+    </div>
+    <script src="/app.js"></script>
+  </body>
+</html>
+

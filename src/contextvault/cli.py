@@ -7,6 +7,7 @@ from pathlib import Path
 
 from contextvault import __version__
 from contextvault.vault import initialize, status
+from contextvault.gui import serve
 
 
 DEFAULT_VAULT = Path(".contextvault/vault.sqlite")
@@ -25,6 +26,9 @@ def build_parser() -> argparse.ArgumentParser:
     subparsers.add_parser("init", help="initialize a local vault")
     subparsers.add_parser("status", help="show local vault status")
     subparsers.add_parser("doctor", help="check local runtime capabilities")
+    ui_parser = subparsers.add_parser("ui", help="start the local management UI")
+    ui_parser.add_argument("--host", default="127.0.0.1")
+    ui_parser.add_argument("--port", type=int, default=8787)
     return parser
 
 
@@ -54,6 +58,11 @@ def main(argv: list[str] | None = None) -> int:
             print(f"SQLite: {sqlite_version}")
             print(f"FTS5: {'available' if fts5 else 'unavailable'}")
             return 0 if fts5 else 1
+        if args.command == "ui":
+            if args.host not in {"127.0.0.1", "localhost", "::1"}:
+                raise ValueError("The management UI may only bind to a loopback host")
+            serve(args.vault, args.host, args.port)
+            return 0
     except (FileNotFoundError, OSError, sqlite3.Error, ValueError) as error:
         print(f"error: {error}", file=sys.stderr)
         return 2

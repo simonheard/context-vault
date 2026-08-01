@@ -49,6 +49,7 @@ ChatGPT 历史对话       设备扫描       手动填写       其他数据源
 8. **隐私优先：** 默认本地处理；高敏感资料和首次跨平台发送必须明确确认。
 9. **敏感同步开关：** 可按 AI 平台和资料类别选择永不发送、每次询问或允许自动同步。
 10. **多账号隔离：** 个人、工作和客户账号分别建立同步路径，避免资料串线。
+11. **本地管理后台：** 在一个简单 GUI 中管理资料、账号、身份空间、设备、隐私和同步历史。
 
 ## 第一版要完成什么
 
@@ -93,6 +94,7 @@ python3 -m pip install -e .
 contextvault init
 contextvault status
 contextvault doctor
+contextvault ui
 python3 -m unittest discover -s tests
 ```
 
@@ -124,3 +126,4 @@ contextvault summary --type devices
 - [敏感信息同步与知情同意](docs/PRIVACY_POLICY.md)
 - [多账号设计](docs/MULTI_ACCOUNT.md)
 - [设计建议与优先级](docs/DESIGN_RECOMMENDATIONS.md)
+- [本地管理后台](docs/GUI.md)

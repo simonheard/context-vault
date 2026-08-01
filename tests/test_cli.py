@@ -27,7 +27,7 @@ class CliTests(unittest.TestCase):
             self.assertIn("Claims: 0", output.getvalue())
             self.assertIn("Devices: 0", output.getvalue())
             self.assertIn("Provider accounts: 0", output.getvalue())
-            self.assertIn("Profile spaces: 0", output.getvalue())
+            self.assertIn("Profile spaces: 1", output.getvalue())
             self.assertIn("Sync routes: 0", output.getvalue())
             self.assertIn("Sync targets: 0", output.getvalue())
 

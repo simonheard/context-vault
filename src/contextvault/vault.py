@@ -3,6 +3,7 @@ from __future__ import annotations
 import sqlite3
 from dataclasses import dataclass
 from pathlib import Path
+from datetime import datetime, timezone
 
 
 SCHEMA_VERSION = 4
@@ -156,6 +157,15 @@ def initialize(path: Path) -> VaultStatus:
         connection.execute(
             "INSERT OR REPLACE INTO metadata(key, value) VALUES (?, ?)",
             ("schema_version", str(SCHEMA_VERSION)),
+        )
+        now = datetime.now(timezone.utc).isoformat()
+        connection.execute(
+            """
+            INSERT OR IGNORE INTO profile_spaces(
+                id, name, display_name, is_default, created_at, updated_at
+            ) VALUES (?, ?, ?, ?, ?, ?)
+            """,
+            ("space_personal", "personal", "Personal", 1, now, now),
         )
     return status(path)
 

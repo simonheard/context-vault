@@ -53,6 +53,7 @@ ChatGPT history       Device scan       Manual input       Other sources
 8. **Privacy-first:** Process locally by default; require confirmation for sensitive data and first-time cross-platform sharing.
 9. **Sensitive-data controls:** Set never, ask every time, or allow automatic sync separately for each provider and category.
 10. **Multi-account isolation:** Route personal, work, and client accounts separately to prevent data mixing.
+11. **Local management UI:** Manage profiles, accounts, spaces, devices, privacy, and sync history in one simple dashboard.
 
 ## First complete workflow
 
@@ -97,6 +98,7 @@ python3 -m pip install -e .
 contextvault init
 contextvault status
 contextvault doctor
+contextvault ui
 python3 -m unittest discover -s tests
 ```
 
@@ -128,3 +130,4 @@ contextvault summary --type devices
 - [Sensitive-data sync and informed consent](docs/PRIVACY_POLICY.en.md)
 - [Multi-account design](docs/MULTI_ACCOUNT.en.md)
 - [Design recommendations and priorities](docs/DESIGN_RECOMMENDATIONS.en.md)
+- [Local management UI](docs/GUI.en.md)

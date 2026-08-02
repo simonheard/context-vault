@@ -6,7 +6,7 @@ from pathlib import Path
 from datetime import datetime, timezone
 
 
-SCHEMA_VERSION = 4
+SCHEMA_VERSION = 5
 
 
 @dataclass(frozen=True)
@@ -19,6 +19,8 @@ class VaultStatus:
     profile_space_count: int
     sync_route_count: int
     sync_target_count: int
+    attachment_count: int
+    sync_event_count: int
 
 
 def initialize(path: Path) -> VaultStatus:
@@ -33,6 +35,11 @@ def initialize(path: Path) -> VaultStatus:
             CREATE TABLE IF NOT EXISTS metadata (
                 key TEXT PRIMARY KEY,
                 value TEXT NOT NULL
+            );
+
+            CREATE TABLE IF NOT EXISTS schema_migrations (
+                version INTEGER PRIMARY KEY,
+                applied_at TEXT NOT NULL
             );
 
             CREATE TABLE IF NOT EXISTS entities (
@@ -147,11 +154,73 @@ def initialize(path: Path) -> VaultStatus:
                 revoked_at TEXT
             );
 
+            CREATE TABLE IF NOT EXISTS attachment_refs (
+                id TEXT PRIMARY KEY,
+                account_id TEXT NOT NULL REFERENCES provider_accounts(id) ON DELETE CASCADE,
+                provider_file_id TEXT NOT NULL,
+                conversation_id TEXT,
+                message_id TEXT,
+                remote_url TEXT,
+                filename TEXT NOT NULL,
+                mime_type TEXT,
+                size_bytes INTEGER,
+                sha256 TEXT,
+                description TEXT,
+                extracted_text TEXT,
+                sensitivity TEXT NOT NULL DEFAULT 'private',
+                status TEXT NOT NULL DEFAULT 'active',
+                last_verified_at TEXT,
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL,
+                UNIQUE(account_id, provider_file_id)
+            );
+
+            CREATE TABLE IF NOT EXISTS sync_events (
+                sequence INTEGER PRIMARY KEY AUTOINCREMENT,
+                event_id TEXT NOT NULL UNIQUE,
+                device_id TEXT NOT NULL,
+                event_type TEXT NOT NULL,
+                aggregate_type TEXT NOT NULL,
+                aggregate_id TEXT NOT NULL,
+                payload_json TEXT NOT NULL,
+                created_at TEXT NOT NULL
+            );
+
+            CREATE TABLE IF NOT EXISTS device_sync_cursors (
+                device_id TEXT PRIMARY KEY,
+                last_sequence INTEGER NOT NULL DEFAULT 0,
+                updated_at TEXT NOT NULL
+            );
+
             CREATE VIRTUAL TABLE IF NOT EXISTS claims_fts USING fts5(
                 claim_id UNINDEXED,
                 attribute,
                 value_text
             );
+
+            CREATE TRIGGER IF NOT EXISTS claims_fts_insert AFTER INSERT ON claims BEGIN
+                INSERT INTO claims_fts(claim_id, attribute, value_text)
+                VALUES (new.id, new.attribute, new.value_text);
+            END;
+
+            CREATE TRIGGER IF NOT EXISTS claims_fts_update AFTER UPDATE OF attribute, value_text ON claims BEGIN
+                DELETE FROM claims_fts WHERE claim_id = old.id;
+                INSERT INTO claims_fts(claim_id, attribute, value_text)
+                VALUES (new.id, new.attribute, new.value_text);
+            END;
+
+            CREATE TRIGGER IF NOT EXISTS claims_fts_delete AFTER DELETE ON claims BEGIN
+                DELETE FROM claims_fts WHERE claim_id = old.id;
+            END;
+
+            CREATE INDEX IF NOT EXISTS claims_status_updated_idx
+                ON claims(status, updated_at DESC);
+            CREATE INDEX IF NOT EXISTS claim_sources_claim_idx
+                ON claim_sources(claim_id);
+            CREATE INDEX IF NOT EXISTS sync_events_device_sequence_idx
+                ON sync_events(device_id, sequence);
+            CREATE INDEX IF NOT EXISTS attachment_refs_account_status_idx
+                ON attachment_refs(account_id, status);
             """
         )
         connection.execute(
@@ -159,6 +228,10 @@ def initialize(path: Path) -> VaultStatus:
             ("schema_version", str(SCHEMA_VERSION)),
         )
         now = datetime.now(timezone.utc).isoformat()
+        connection.execute(
+            "INSERT OR IGNORE INTO schema_migrations(version, applied_at) VALUES (?, ?)",
+            (SCHEMA_VERSION, now),
+        )
         connection.execute(
             """
             INSERT OR IGNORE INTO profile_spaces(
@@ -186,6 +259,8 @@ def status(path: Path) -> VaultStatus:
         space_row = connection.execute("SELECT COUNT(*) FROM profile_spaces").fetchone()
         route_row = connection.execute("SELECT COUNT(*) FROM sync_routes").fetchone()
         target_row = connection.execute("SELECT COUNT(*) FROM sync_targets").fetchone()
+        attachment_row = connection.execute("SELECT COUNT(*) FROM attachment_refs").fetchone()
+        event_row = connection.execute("SELECT COUNT(*) FROM sync_events").fetchone()
     if None in (
         version_row,
         claim_row,
@@ -194,6 +269,8 @@ def status(path: Path) -> VaultStatus:
         space_row,
         route_row,
         target_row,
+        attachment_row,
+        event_row,
     ):
         raise ValueError(f"Not a valid ContextVault vault: {path}")
     return VaultStatus(
@@ -205,4 +282,6 @@ def status(path: Path) -> VaultStatus:
         int(space_row[0]),
         int(route_row[0]),
         int(target_row[0]),
+        int(attachment_row[0]),
+        int(event_row[0]),
     )

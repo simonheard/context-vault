@@ -68,7 +68,21 @@
 
         <section class="view" id="profile-view">
           <div class="section-intro"><div><h2>用户资料</h2><p>候选资料经过确认后才进入标准档案。</p></div><button class="primary" disabled>导入 ChatGPT 数据</button></div>
-          <article class="panel"><div class="empty-state tall"><strong>暂无资料候选</strong><p>导入功能将在下一阶段实现。这里将提供来源、置信度、时间和敏感级别审阅。</p></div></article>
+          <div class="grid form-layout">
+            <article class="panel"><h3>资料与候选队列</h3><div id="claims-list" class="list"><p class="muted">正在读取…</p></div></article>
+            <article class="panel">
+              <h3>手动添加候选资料</h3>
+              <form id="claim-form">
+                <label>属性<input name="attribute" maxlength="160" placeholder="例如：work.role" required></label>
+                <label>内容<input name="value" placeholder="例如：软件工程师" required></label>
+                <label>身份空间<select name="space" id="claim-space"><option value="personal">Personal</option></select></label>
+                <label>敏感级别<select name="sensitivity"><option value="personal">个人</option><option value="private">私密</option><option value="sensitive">敏感（同步时需授权）</option><option value="public">公开</option></select></label>
+                <p class="form-hint">秘密级别数据禁止保存。新增内容先进入候选队列。</p>
+                <button class="primary" type="submit">添加候选</button>
+                <p class="form-message" id="claim-message" role="status"></p>
+              </form>
+            </article>
+          </div>
         </section>
 
         <section class="view" id="accounts-view">
@@ -112,10 +126,9 @@
           </div>
         </section>
 
-        <section class="view" id="history-view"><div class="section-intro"><div><h2>同步历史</h2><p>每次同步、授权、纠正和撤销都有记录。</p></div></div><article class="panel"><div class="empty-state tall"><strong>暂无历史记录</strong><p>完成首次同步后，这里会显示目标账号、资料版本和发送 manifest。</p></div></article></section>
+        <section class="view" id="history-view"><div class="section-intro"><div><h2>同步历史</h2><p>每次资料、账号和身份空间变化都进入只追加事件日志。</p></div></div><article class="panel"><div id="events-list" class="list"><p class="muted">正在读取…</p></div></article></section>
       </main>
     </div>
     <script src="/app.js"></script>
   </body>
 </html>
-

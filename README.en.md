@@ -81,12 +81,16 @@ The first release prioritizes:
 
 ## Repository status
 
-This repository currently contains the product and data-model foundation:
+This repository now contains a runnable local backbone (v0.6.0):
 
 - a zero-dependency Python CLI;
-- a SQLite store centered on `Entity`, `Claim`, `Device`, and `SyncTarget`;
-- a personal information model, roadmap, security boundaries, and architecture;
-- vault initialization and status tests.
+- a SQLite store and explicit domain model centered on `Entity`, `Claim`, `ProviderAccount`, `ProfileSpace`, and `AttachmentRef`;
+- candidate creation, confirmation, rejection, and canonical Markdown/JSON profile rendering;
+- multi-account and profile-space management;
+- attachment registration that stores provider references instead of file bodies;
+- an append-only sync event log and multi-device cursor foundation;
+- repository-level rejection of secret-class data;
+- a working local management GUI and automated tests for the core workflow.
 
 ## Quick start
 
@@ -100,16 +104,21 @@ contextvault init
 contextvault status
 contextvault doctor
 contextvault ui
+contextvault accounts add --platform chatgpt --label "Personal ChatGPT"
+contextvault claims add identity.location "New York"
+contextvault claims list
+contextvault claims confirm <claim-id>
+contextvault profile show
+contextvault events list
 python3 -m unittest discover -s tests
 ```
 
-## Planned commands
+## Later planned commands
 
 ```text
 contextvault import chatgpt-export.zip
 contextvault extract-profile
 contextvault review
-contextvault profile show
 contextvault devices scan
 contextvault diff
 contextvault sync add gemini
@@ -117,7 +126,6 @@ contextvault sync preview gemini
 contextvault sync run gemini
 contextvault privacy show
 contextvault privacy set --target gemini --sensitive ask
-contextvault accounts list
 contextvault routes preview <route>
 contextvault summary --type personal
 contextvault summary --type devices

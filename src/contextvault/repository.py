@@ -1,0 +1,603 @@
+from __future__ import annotations
+
+import json
+import sqlite3
+from contextlib import contextmanager
+from pathlib import Path
+from typing import Any, Iterator, Optional
+from uuid import uuid4
+
+from contextvault.domain import (
+    AttachmentRef,
+    Claim,
+    ClaimSource,
+    ClaimStatus,
+    ProfileSpace,
+    ProviderAccount,
+    Sensitivity,
+    SourceType,
+    SyncEvent,
+    utc_now,
+)
+from contextvault.vault import initialize
+
+
+class VaultRepository:
+    def __init__(self, path: Path):
+        self.path = initialize(path).path
+
+    @contextmanager
+    def transaction(self) -> Iterator[sqlite3.Connection]:
+        connection = sqlite3.connect(self.path)
+        connection.row_factory = sqlite3.Row
+        connection.execute("PRAGMA foreign_keys = ON")
+        try:
+            with connection:
+                yield connection
+        finally:
+            connection.close()
+
+    def add_account(self, platform: str, label: str) -> ProviderAccount:
+        platform = platform.strip().lower()
+        label = label.strip()
+        if platform not in {"chatgpt", "gemini", "claude", "other"}:
+            raise ValueError("Unsupported provider")
+        if not 1 <= len(label) <= 80:
+            raise ValueError("Account label must be between 1 and 80 characters")
+        now = utc_now()
+        account = ProviderAccount(
+            id=f"account_{uuid4().hex}",
+            platform=platform,
+            account_label=label,
+            status="active",
+            created_at=now,
+            updated_at=now,
+        )
+        with self.transaction() as connection:
+            connection.execute(
+                """
+                INSERT INTO provider_accounts(
+                    id, platform, account_label, status, created_at, updated_at
+                ) VALUES (?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    account.id,
+                    account.platform,
+                    account.account_label,
+                    account.status,
+                    account.created_at,
+                    account.updated_at,
+                ),
+            )
+            self._append_event(
+                connection, "account.created", "provider_account", account.id, _account_dict(account)
+            )
+        return account
+
+    def list_accounts(self) -> list[ProviderAccount]:
+        with self.transaction() as connection:
+            rows = connection.execute(
+                "SELECT * FROM provider_accounts ORDER BY created_at"
+            ).fetchall()
+        return [_account_from_row(row) for row in rows]
+
+    def add_attachment_ref(
+        self,
+        *,
+        account_id: str,
+        provider_file_id: str,
+        filename: str,
+        remote_url: Optional[str] = None,
+        mime_type: Optional[str] = None,
+        size_bytes: Optional[int] = None,
+        description: Optional[str] = None,
+        extracted_text: Optional[str] = None,
+        sensitivity: Sensitivity = Sensitivity.PRIVATE,
+        conversation_id: Optional[str] = None,
+        message_id: Optional[str] = None,
+        sha256: Optional[str] = None,
+    ) -> AttachmentRef:
+        provider_file_id = provider_file_id.strip()
+        filename = filename.strip()
+        if not provider_file_id:
+            raise ValueError("Provider file ID must not be empty")
+        if not filename:
+            raise ValueError("Filename must not be empty")
+        if size_bytes is not None and size_bytes < 0:
+            raise ValueError("Attachment size must not be negative")
+        if sensitivity is Sensitivity.SECRET:
+            raise ValueError("Secret-class data must not be stored")
+        now = utc_now()
+        attachment = AttachmentRef(
+            id=f"attachment_{uuid4().hex}",
+            account_id=account_id,
+            provider_file_id=provider_file_id,
+            filename=filename,
+            remote_url=remote_url,
+            mime_type=mime_type,
+            size_bytes=size_bytes,
+            sha256=sha256,
+            description=description,
+            extracted_text=extracted_text,
+            sensitivity=sensitivity,
+            status="active",
+            conversation_id=conversation_id,
+            message_id=message_id,
+            created_at=now,
+            updated_at=now,
+        )
+        with self.transaction() as connection:
+            connection.execute(
+                """
+                INSERT INTO attachment_refs(
+                    id, account_id, provider_file_id, conversation_id, message_id,
+                    remote_url, filename, mime_type, size_bytes, sha256,
+                    description, extracted_text, sensitivity, status,
+                    last_verified_at, created_at, updated_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    attachment.id,
+                    attachment.account_id,
+                    attachment.provider_file_id,
+                    attachment.conversation_id,
+                    attachment.message_id,
+                    attachment.remote_url,
+                    attachment.filename,
+                    attachment.mime_type,
+                    attachment.size_bytes,
+                    attachment.sha256,
+                    attachment.description,
+                    attachment.extracted_text,
+                    attachment.sensitivity.value,
+                    attachment.status,
+                    attachment.last_verified_at,
+                    attachment.created_at,
+                    attachment.updated_at,
+                ),
+            )
+            self._append_event(
+                connection,
+                "attachment.created",
+                "attachment_ref",
+                attachment.id,
+                _attachment_dict(attachment),
+            )
+        return attachment
+
+    def list_attachment_refs(
+        self, account_id: Optional[str] = None
+    ) -> list[AttachmentRef]:
+        query = "SELECT * FROM attachment_refs"
+        parameters: tuple[str, ...] = ()
+        if account_id is not None:
+            query += " WHERE account_id = ?"
+            parameters = (account_id,)
+        query += " ORDER BY created_at"
+        with self.transaction() as connection:
+            rows = connection.execute(query, parameters).fetchall()
+        return [_attachment_from_row(row) for row in rows]
+
+    def add_space(self, name: str, display_name: str) -> ProfileSpace:
+        name = name.strip().lower().replace(" ", "-")
+        display_name = display_name.strip()
+        if not name or not all(character.isalnum() or character in "-_" for character in name):
+            raise ValueError("Space name may contain letters, numbers, hyphens, and underscores")
+        if not 1 <= len(display_name) <= 80:
+            raise ValueError("Display name must be between 1 and 80 characters")
+        now = utc_now()
+        space = ProfileSpace(
+            id=f"space_{uuid4().hex}",
+            name=name,
+            display_name=display_name,
+            is_default=False,
+            created_at=now,
+            updated_at=now,
+        )
+        with self.transaction() as connection:
+            connection.execute(
+                """
+                INSERT INTO profile_spaces(
+                    id, name, display_name, is_default, created_at, updated_at
+                ) VALUES (?, ?, ?, ?, ?, ?)
+                """,
+                (space.id, space.name, space.display_name, 0, now, now),
+            )
+            self._append_event(
+                connection, "space.created", "profile_space", space.id, _space_dict(space)
+            )
+        return space
+
+    def list_spaces(self) -> list[ProfileSpace]:
+        with self.transaction() as connection:
+            rows = connection.execute(
+                "SELECT * FROM profile_spaces ORDER BY is_default DESC, created_at"
+            ).fetchall()
+        return [_space_from_row(row) for row in rows]
+
+    def get_space(self, name_or_id: str) -> ProfileSpace:
+        with self.transaction() as connection:
+            row = connection.execute(
+                "SELECT * FROM profile_spaces WHERE id = ? OR name = ?",
+                (name_or_id, name_or_id),
+            ).fetchone()
+        if row is None:
+            raise ValueError(f"Unknown profile space: {name_or_id}")
+        return _space_from_row(row)
+
+    def ensure_user_entity(self) -> str:
+        now = utc_now()
+        with self.transaction() as connection:
+            row = connection.execute(
+                "SELECT id FROM entities WHERE kind = 'user' ORDER BY created_at LIMIT 1"
+            ).fetchone()
+            if row is not None:
+                return str(row[0])
+            entity_id = f"entity_{uuid4().hex}"
+            connection.execute(
+                "INSERT INTO entities(id, kind, display_name, created_at, updated_at) VALUES (?, ?, ?, ?, ?)",
+                (entity_id, "user", "User", now, now),
+            )
+            self._append_event(
+                connection,
+                "entity.created",
+                "entity",
+                entity_id,
+                {"kind": "user", "display_name": "User"},
+            )
+            return entity_id
+
+    def add_claim(
+        self,
+        *,
+        entity_id: str,
+        attribute: str,
+        value: Any,
+        value_text: Optional[str] = None,
+        confidence: float = 1.0,
+        status: ClaimStatus = ClaimStatus.CANDIDATE,
+        sensitivity: Sensitivity = Sensitivity.PERSONAL,
+        space_ids: Optional[list[str]] = None,
+        source: Optional[ClaimSource] = None,
+        valid_from: Optional[str] = None,
+        valid_until: Optional[str] = None,
+    ) -> Claim:
+        attribute = attribute.strip()
+        if not attribute or len(attribute) > 160:
+            raise ValueError("Claim attribute must be between 1 and 160 characters")
+        if not 0 <= confidence <= 1:
+            raise ValueError("Confidence must be between 0 and 1")
+        if sensitivity is Sensitivity.SECRET:
+            raise ValueError("Secret-class data must not be stored")
+        serialized = json.dumps(value, ensure_ascii=False, sort_keys=True)
+        text = (value_text if value_text is not None else str(value)).strip()
+        if not text:
+            raise ValueError("Claim value must not be empty")
+        now = utc_now()
+        observed_at = source.observed_at if source else now
+        claim = Claim(
+            id=f"claim_{uuid4().hex}",
+            entity_id=entity_id,
+            attribute=attribute,
+            value=value,
+            value_text=text,
+            confidence=confidence,
+            status=status,
+            sensitivity=sensitivity,
+            observed_at=observed_at,
+            created_at=now,
+            updated_at=now,
+            valid_from=valid_from,
+            valid_until=valid_until,
+        )
+        with self.transaction() as connection:
+            connection.execute(
+                """
+                INSERT INTO claims(
+                    id, entity_id, attribute, value_json, value_text, confidence,
+                    status, sensitivity, valid_from, valid_until, observed_at,
+                    created_at, updated_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    claim.id,
+                    claim.entity_id,
+                    claim.attribute,
+                    serialized,
+                    claim.value_text,
+                    claim.confidence,
+                    claim.status.value,
+                    claim.sensitivity.value,
+                    claim.valid_from,
+                    claim.valid_until,
+                    claim.observed_at,
+                    claim.created_at,
+                    claim.updated_at,
+                ),
+            )
+            for space_id in space_ids or ["space_personal"]:
+                connection.execute(
+                    "INSERT INTO claim_spaces(claim_id, space_id) VALUES (?, ?)",
+                    (claim.id, space_id),
+                )
+            if source is not None:
+                connection.execute(
+                    """
+                    INSERT INTO claim_sources(
+                        id, claim_id, account_id, source_type, platform,
+                        conversation_id, message_id, device_scan_id, evidence_hash,
+                        observed_at
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    """,
+                    (
+                        f"source_{uuid4().hex}",
+                        claim.id,
+                        source.account_id,
+                        source.source_type.value,
+                        source.platform,
+                        source.conversation_id,
+                        source.message_id,
+                        source.device_scan_id,
+                        source.evidence_hash,
+                        source.observed_at,
+                    ),
+                )
+            self._append_event(
+                connection, "claim.created", "claim", claim.id, _claim_dict(claim)
+            )
+        return claim
+
+    def get_claim(self, claim_id: str) -> Claim:
+        with self.transaction() as connection:
+            row = connection.execute("SELECT * FROM claims WHERE id = ?", (claim_id,)).fetchone()
+        if row is None:
+            raise ValueError(f"Unknown claim: {claim_id}")
+        return _claim_from_row(row)
+
+    def list_claims(
+        self,
+        *,
+        status: Optional[ClaimStatus] = None,
+        space: Optional[str] = None,
+        limit: int = 200,
+    ) -> list[Claim]:
+        if not 1 <= limit <= 1000:
+            raise ValueError("Limit must be between 1 and 1000")
+        parameters: list[Any] = []
+        where: list[str] = []
+        joins = ""
+        if status is not None:
+            where.append("c.status = ?")
+            parameters.append(status.value)
+        if space is not None:
+            joins = " JOIN claim_spaces cs ON cs.claim_id = c.id JOIN profile_spaces ps ON ps.id = cs.space_id "
+            where.append("(ps.id = ? OR ps.name = ?)")
+            parameters.extend([space, space])
+        clause = f" WHERE {' AND '.join(where)}" if where else ""
+        parameters.append(limit)
+        with self.transaction() as connection:
+            rows = connection.execute(
+                f"SELECT DISTINCT c.* FROM claims c {joins}{clause} ORDER BY c.updated_at DESC LIMIT ?",
+                parameters,
+            ).fetchall()
+        return [_claim_from_row(row) for row in rows]
+
+    def transition_claim(self, claim_id: str, status: ClaimStatus) -> Claim:
+        current = self.get_claim(claim_id)
+        allowed = {
+            ClaimStatus.CANDIDATE: {
+                ClaimStatus.CONFIRMED,
+                ClaimStatus.REJECTED,
+                ClaimStatus.CONFLICTED,
+                ClaimStatus.DELETED,
+            },
+            ClaimStatus.CONFIRMED: {
+                ClaimStatus.SUPERSEDED,
+                ClaimStatus.EXPIRED,
+                ClaimStatus.CONFLICTED,
+                ClaimStatus.DELETED,
+            },
+            ClaimStatus.CONFLICTED: {
+                ClaimStatus.CONFIRMED,
+                ClaimStatus.REJECTED,
+                ClaimStatus.DELETED,
+            },
+        }
+        if status not in allowed.get(current.status, set()):
+            raise ValueError(f"Cannot transition claim from {current.status.value} to {status.value}")
+        now = utc_now()
+        with self.transaction() as connection:
+            connection.execute(
+                "UPDATE claims SET status = ?, updated_at = ? WHERE id = ?",
+                (status.value, now, claim_id),
+            )
+            self._append_event(
+                connection,
+                f"claim.{status.value}",
+                "claim",
+                claim_id,
+                {"previous_status": current.status.value, "status": status.value},
+            )
+        return self.get_claim(claim_id)
+
+    def list_events(self, after_sequence: int = 0, limit: int = 200) -> list[SyncEvent]:
+        with self.transaction() as connection:
+            rows = connection.execute(
+                """
+                SELECT * FROM sync_events
+                WHERE sequence > ? ORDER BY sequence LIMIT ?
+                """,
+                (after_sequence, limit),
+            ).fetchall()
+        return [_event_from_row(row) for row in rows]
+
+    def get_cursor(self, device_id: str) -> int:
+        with self.transaction() as connection:
+            row = connection.execute(
+                "SELECT last_sequence FROM device_sync_cursors WHERE device_id = ?",
+                (device_id,),
+            ).fetchone()
+        return int(row[0]) if row else 0
+
+    def set_cursor(self, device_id: str, sequence: int) -> None:
+        with self.transaction() as connection:
+            connection.execute(
+                """
+                INSERT INTO device_sync_cursors(device_id, last_sequence, updated_at)
+                VALUES (?, ?, ?)
+                ON CONFLICT(device_id) DO UPDATE SET
+                    last_sequence = excluded.last_sequence,
+                    updated_at = excluded.updated_at
+                """,
+                (device_id, sequence, utc_now()),
+            )
+
+    def _append_event(
+        self,
+        connection: sqlite3.Connection,
+        event_type: str,
+        aggregate_type: str,
+        aggregate_id: str,
+        payload: dict[str, Any],
+        device_id: str = "local",
+    ) -> None:
+        connection.execute(
+            """
+            INSERT INTO sync_events(
+                event_id, device_id, event_type, aggregate_type, aggregate_id,
+                payload_json, created_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                f"event_{uuid4().hex}",
+                device_id,
+                event_type,
+                aggregate_type,
+                aggregate_id,
+                json.dumps(payload, ensure_ascii=False, sort_keys=True),
+                utc_now(),
+            ),
+        )
+
+
+def _account_from_row(row: sqlite3.Row) -> ProviderAccount:
+    return ProviderAccount(
+        id=row["id"],
+        platform=row["platform"],
+        account_label=row["account_label"],
+        status=row["status"],
+        created_at=row["created_at"],
+        updated_at=row["updated_at"],
+        external_account_hash=row["external_account_hash"],
+    )
+
+
+def _space_from_row(row: sqlite3.Row) -> ProfileSpace:
+    return ProfileSpace(
+        id=row["id"],
+        name=row["name"],
+        display_name=row["display_name"],
+        is_default=bool(row["is_default"]),
+        created_at=row["created_at"],
+        updated_at=row["updated_at"],
+    )
+
+
+def _claim_from_row(row: sqlite3.Row) -> Claim:
+    return Claim(
+        id=row["id"],
+        entity_id=row["entity_id"],
+        attribute=row["attribute"],
+        value=json.loads(row["value_json"]),
+        value_text=row["value_text"],
+        confidence=float(row["confidence"]),
+        status=ClaimStatus(row["status"]),
+        sensitivity=Sensitivity(row["sensitivity"]),
+        observed_at=row["observed_at"],
+        created_at=row["created_at"],
+        updated_at=row["updated_at"],
+        valid_from=row["valid_from"],
+        valid_until=row["valid_until"],
+    )
+
+
+def _event_from_row(row: sqlite3.Row) -> SyncEvent:
+    return SyncEvent(
+        sequence=int(row["sequence"]),
+        event_id=row["event_id"],
+        device_id=row["device_id"],
+        event_type=row["event_type"],
+        aggregate_type=row["aggregate_type"],
+        aggregate_id=row["aggregate_id"],
+        payload=json.loads(row["payload_json"]),
+        created_at=row["created_at"],
+    )
+
+
+def _attachment_from_row(row: sqlite3.Row) -> AttachmentRef:
+    return AttachmentRef(
+        id=row["id"],
+        account_id=row["account_id"],
+        provider_file_id=row["provider_file_id"],
+        filename=row["filename"],
+        status=row["status"],
+        created_at=row["created_at"],
+        updated_at=row["updated_at"],
+        conversation_id=row["conversation_id"],
+        message_id=row["message_id"],
+        remote_url=row["remote_url"],
+        mime_type=row["mime_type"],
+        size_bytes=row["size_bytes"],
+        sha256=row["sha256"],
+        description=row["description"],
+        extracted_text=row["extracted_text"],
+        sensitivity=Sensitivity(row["sensitivity"]),
+        last_verified_at=row["last_verified_at"],
+    )
+
+
+def _account_dict(account: ProviderAccount) -> dict[str, Any]:
+    return {
+        "id": account.id,
+        "platform": account.platform,
+        "account_label": account.account_label,
+        "status": account.status,
+    }
+
+
+def _space_dict(space: ProfileSpace) -> dict[str, Any]:
+    return {
+        "id": space.id,
+        "name": space.name,
+        "display_name": space.display_name,
+        "is_default": space.is_default,
+    }
+
+
+def _claim_dict(claim: Claim) -> dict[str, Any]:
+    return {
+        "id": claim.id,
+        "entity_id": claim.entity_id,
+        "attribute": claim.attribute,
+        "value": claim.value,
+        "value_text": claim.value_text,
+        "confidence": claim.confidence,
+        "status": claim.status.value,
+        "sensitivity": claim.sensitivity.value,
+        "valid_from": claim.valid_from,
+        "valid_until": claim.valid_until,
+    }
+
+
+def _attachment_dict(attachment: AttachmentRef) -> dict[str, Any]:
+    return {
+        "id": attachment.id,
+        "account_id": attachment.account_id,
+        "provider_file_id": attachment.provider_file_id,
+        "filename": attachment.filename,
+        "remote_url": attachment.remote_url,
+        "mime_type": attachment.mime_type,
+        "size_bytes": attachment.size_bytes,
+        "sensitivity": attachment.sensitivity.value,
+        "status": attachment.status,
+    }

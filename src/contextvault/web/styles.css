@@ -84,6 +84,10 @@ input:focus, select:focus, button:focus-visible { outline: 3px solid rgba(51, 13
 .list-item strong, .list-item small { display: block; }
 .list-item small { color: var(--muted); margin-top: 3px; }
 .chip { font-size: 11px; color: var(--green); background: var(--green-soft); padding: 5px 8px; border-radius: 999px; }
+.row-actions { display: flex; gap: 6px; }
+.mini-button { border: 1px solid var(--line); border-radius: 7px; padding: 5px 8px; background: #fff; font-size: 11px; font-weight: 700; }
+.mini-button.confirm { color: var(--green); border-color: #b9d7c4; }
+.mini-button.reject { color: var(--red); border-color: #e4c3c0; }
 .privacy-card { margin-bottom: 18px; }
 .privacy-card p { margin: 5px 0 0 20px; color: var(--muted); font-size: 13px; }
 .status-dot { display: inline-block; width: 9px; height: 9px; border-radius: 50%; margin-right: 10px; }
@@ -115,4 +119,3 @@ input:focus, select:focus, button:focus-visible { outline: 3px solid rgba(51, 13
   .metrics { grid-template-columns: 1fr; }
   .notice { align-items: flex-start; gap: 12px; }
 }
-

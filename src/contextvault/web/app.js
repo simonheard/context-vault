@@ -50,6 +50,13 @@ function listItem(title, subtitle, badge) {
   return item;
 }
 
+function emptyMessage(text) {
+  const empty = document.createElement("p");
+  empty.className = "muted";
+  empty.textContent = text;
+  return empty;
+}
+
 async function loadDashboard() {
   const { counts } = await api("/api/dashboard");
   document.getElementById("metric-claims").textContent = counts.claims;
@@ -65,10 +72,7 @@ async function loadAccounts() {
   const summary = document.getElementById("account-summary");
   list.replaceChildren();
   if (!items.length) {
-    const empty = document.createElement("p");
-    empty.className = "muted";
-    empty.textContent = "尚未添加账号。";
-    list.append(empty);
+    list.append(emptyMessage("尚未添加账号。"));
     return;
   }
   items.forEach((item) => list.append(listItem(item.account_label, item.platform, item.status)));
@@ -80,6 +84,60 @@ async function loadSpaces() {
   const { items } = await api("/api/spaces");
   const list = document.getElementById("spaces-list");
   list.replaceChildren(...items.map((item) => listItem(item.display_name, item.name, item.is_default ? "默认" : "隔离")));
+  const selector = document.getElementById("claim-space");
+  selector.replaceChildren(...items.map((item) => {
+    const option = document.createElement("option");
+    option.value = item.name;
+    option.textContent = item.display_name;
+    return option;
+  }));
+}
+
+async function claimAction(claimId, action) {
+  await api(`/api/claims/${claimId}/${action}`, { method: "POST", body: "{}" });
+  await Promise.all([loadClaims(), loadDashboard(), loadEvents()]);
+}
+
+async function loadClaims() {
+  const { items } = await api("/api/claims");
+  const list = document.getElementById("claims-list");
+  list.replaceChildren();
+  if (!items.length) {
+    list.append(emptyMessage("暂无资料。手动添加的内容会先进入候选队列。"));
+    return;
+  }
+  items.forEach((item) => {
+    const row = listItem(item.attribute, item.value_text, item.status);
+    if (item.status === "candidate") {
+      const actions = row.querySelector(".chip");
+      actions.className = "row-actions";
+      actions.replaceChildren();
+      const confirm = document.createElement("button");
+      confirm.className = "mini-button confirm";
+      confirm.textContent = "确认";
+      confirm.addEventListener("click", () => claimAction(item.id, "confirm"));
+      const reject = document.createElement("button");
+      reject.className = "mini-button reject";
+      reject.textContent = "拒绝";
+      reject.addEventListener("click", () => claimAction(item.id, "reject"));
+      actions.append(confirm, reject);
+    }
+    list.append(row);
+  });
+}
+
+async function loadEvents() {
+  const { items } = await api("/api/events");
+  const list = document.getElementById("events-list");
+  list.replaceChildren();
+  if (!items.length) {
+    list.append(emptyMessage("暂无历史记录。"));
+    return;
+  }
+  [...items].reverse().forEach((item) => {
+    const time = new Date(item.created_at).toLocaleString();
+    list.append(listItem(item.event_type, `${item.aggregate_type} · ${time}`, `#${item.sequence}`));
+  });
 }
 
 document.getElementById("account-form").addEventListener("submit", async (event) => {
@@ -116,7 +174,23 @@ document.getElementById("space-form").addEventListener("submit", async (event) =
   }
 });
 
-Promise.all([loadDashboard(), loadAccounts(), loadSpaces()]).catch((error) => {
-  document.querySelector("main").dataset.error = error.message;
+document.getElementById("claim-form").addEventListener("submit", async (event) => {
+  event.preventDefault();
+  const form = event.currentTarget;
+  const message = document.getElementById("claim-message");
+  const values = Object.fromEntries(new FormData(form));
+  try {
+    await api("/api/claims", { method: "POST", body: JSON.stringify(values) });
+    form.reset();
+    message.className = "form-message";
+    message.textContent = "候选资料已添加，等待确认。";
+    await Promise.all([loadClaims(), loadDashboard(), loadEvents()]);
+  } catch (error) {
+    message.className = "form-message error";
+    message.textContent = error.message;
+  }
 });
 
+Promise.all([loadDashboard(), loadAccounts(), loadSpaces(), loadClaims(), loadEvents()]).catch((error) => {
+  document.querySelector("main").dataset.error = error.message;
+});

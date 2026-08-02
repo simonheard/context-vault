@@ -77,12 +77,16 @@ ChatGPT 历史对话       设备扫描       手动填写       其他数据源
 
 ## 当前仓库状态
 
-当前是产品与数据模型基础阶段，包含：
+当前已经具备可运行的本地骨干（v0.6.0），包含：
 
 - 零依赖 Python CLI；
-- SQLite 资料库，核心对象为 `Entity`、`Claim`、`Device` 和 `SyncTarget`；
-- 用户资料模型、产品路线图、安全边界和系统架构；
-- vault 初始化与状态测试。
+- SQLite 资料库与显式领域模型，核心对象为 `Entity`、`Claim`、`ProviderAccount`、`ProfileSpace` 和 `AttachmentRef`；
+- 候选资料的添加、确认、拒绝，以及 Markdown/JSON 标准档案生成；
+- 多账号与身份空间管理；
+- 只保存提供商文件引用的附件登记；
+- 只追加同步事件日志和多设备游标基础；
+- 禁止保存秘密级数据的仓储层校验；
+- 可操作的本地管理 GUI，以及覆盖核心闭环的自动化测试。
 
 ## 快速开始
 
@@ -96,16 +100,21 @@ contextvault init
 contextvault status
 contextvault doctor
 contextvault ui
+contextvault accounts add --platform chatgpt --label "个人 ChatGPT"
+contextvault claims add identity.location "New York"
+contextvault claims list
+contextvault claims confirm <claim-id>
+contextvault profile show
+contextvault events list
 python3 -m unittest discover -s tests
 ```
 
-## 规划命令
+## 后续规划命令
 
 ```text
 contextvault import chatgpt-export.zip
 contextvault extract-profile
 contextvault review
-contextvault profile show
 contextvault devices scan
 contextvault diff
 contextvault sync add gemini
@@ -113,7 +122,6 @@ contextvault sync preview gemini
 contextvault sync run gemini
 contextvault privacy show
 contextvault privacy set --target gemini --sensitive ask
-contextvault accounts list
 contextvault routes preview <route>
 contextvault summary --type personal
 contextvault summary --type devices

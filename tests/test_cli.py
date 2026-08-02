@@ -23,13 +23,15 @@ class CliTests(unittest.TestCase):
 
             self.assertEqual(init_code, 0)
             self.assertEqual(status_code, 0)
-            self.assertEqual(status(vault_path).schema_version, 4)
+            self.assertEqual(status(vault_path).schema_version, 5)
             self.assertIn("Claims: 0", output.getvalue())
             self.assertIn("Devices: 0", output.getvalue())
             self.assertIn("Provider accounts: 0", output.getvalue())
             self.assertIn("Profile spaces: 1", output.getvalue())
             self.assertIn("Sync routes: 0", output.getvalue())
             self.assertIn("Sync targets: 0", output.getvalue())
+            self.assertIn("Attachment references: 0", output.getvalue())
+            self.assertIn("Sync events: 0", output.getvalue())
 
             with sqlite3.connect(vault_path) as connection:
                 tables = {
@@ -41,6 +43,7 @@ class CliTests(unittest.TestCase):
             self.assertTrue(
                 {
                     "entities",
+                    "schema_migrations",
                     "claims",
                     "claim_sources",
                     "devices",
@@ -51,6 +54,9 @@ class CliTests(unittest.TestCase):
                     "sync_routes",
                     "sync_receipts",
                     "consent_receipts",
+                    "attachment_refs",
+                    "sync_events",
+                    "device_sync_cursors",
                     "claims_fts",
                 }.issubset(tables)
             )
@@ -64,6 +70,36 @@ class CliTests(unittest.TestCase):
 
             self.assertEqual(code, 2)
             self.assertIn("Vault does not exist", errors.getvalue())
+
+    def test_profile_workflow_commands(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            vault_path = Path(directory) / "vault.sqlite"
+            output = io.StringIO()
+            with contextlib.redirect_stdout(output):
+                self.assertEqual(
+                    main(
+                        [
+                            "--vault",
+                            str(vault_path),
+                            "claims",
+                            "add",
+                            "identity.location",
+                            "New York",
+                        ]
+                    ),
+                    0,
+                )
+                self.assertEqual(
+                    main(["--vault", str(vault_path), "claims", "list"]), 0
+                )
+                self.assertEqual(
+                    main(["--vault", str(vault_path), "events", "list"]), 0
+                )
+
+            value = output.getvalue()
+            self.assertIn("Added candidate:", value)
+            self.assertIn('"attribute": "identity.location"', value)
+            self.assertIn('"event_type": "claim.created"', value)
 
 
 if __name__ == "__main__":

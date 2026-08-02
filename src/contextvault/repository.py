@@ -3,6 +3,7 @@ from __future__ import annotations
 import hashlib
 import json
 import sqlite3
+import secrets
 from contextlib import contextmanager
 from pathlib import Path
 from typing import Any, Iterator, Optional
@@ -39,6 +40,31 @@ class VaultRepository:
                 yield connection
         finally:
             connection.close()
+
+    def extension_pairing_token(self) -> str:
+        with self.transaction() as connection:
+            row = connection.execute(
+                "SELECT value FROM metadata WHERE key = 'extension_pairing_token'"
+            ).fetchone()
+        if row is None:
+            raise ValueError("Extension pairing token is unavailable")
+        return str(row[0])
+
+    def rotate_extension_pairing_token(self) -> str:
+        token = secrets.token_urlsafe(32)
+        with self.transaction() as connection:
+            connection.execute(
+                "INSERT OR REPLACE INTO metadata(key, value) VALUES ('extension_pairing_token', ?)",
+                (token,),
+            )
+            self._append_event(
+                connection,
+                "extension.pairing_token_rotated",
+                "extension_pairing",
+                "local",
+                {},
+            )
+        return token
 
     def add_account(self, platform: str, label: str) -> ProviderAccount:
         platform = platform.strip().lower()

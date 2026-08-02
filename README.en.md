@@ -81,7 +81,7 @@ The first release prioritizes:
 
 ## Repository status
 
-This repository now contains a runnable local closed loop (v0.7.0):
+This repository now contains a runnable local closed loop and user-session adapters (v0.8.0):
 
 - a zero-dependency Python CLI;
 - a SQLite store and explicit domain model centered on `Entity`, `Claim`, `ProviderAccount`, `ProfileSpace`, and `AttachmentRef`;
@@ -93,6 +93,7 @@ This repository now contains a runnable local closed loop (v0.7.0):
 - a working local management GUI and automated tests for the core workflow.
 - official ChatGPT export parsing, pre-storage secret redaction, and deterministic Chinese/English candidate extraction;
 - device scanning, sync policy, preview diffs, profile packages, informed consent, and sync receipts.
+- a user-side Chrome extension that fills approved data into the user's logged-in ChatGPT, Gemini, or Claude page without handling credentials or sending automatically.
 
 ## Quick start
 
@@ -116,14 +117,15 @@ contextvault import chatgpt-export.zip
 contextvault devices scan
 contextvault routes preview <route-id>
 contextvault sync run <route-id> --output gemini-profile.md
+contextvault extension token
 python3 -m unittest discover -s tests
 ```
 
 ## Later planned commands
 
 ```text
-Browser extension for incremental conversation capture
-Gemini / Claude / ChatGPT page-writing adapters
+Browser capture of user-approved incremental conversations
+Official provider APIs and attachment-upload adapters
 End-to-end encrypted multi-device sync server
 Optional local LLM and external data connectors
 ```
@@ -139,3 +141,4 @@ Optional local LLM and external data connectors
 - [Local management UI](docs/GUI.en.md)
 - [Attachment references and cross-AI handling](docs/ATTACHMENTS.en.md)
 - [Implementation status and external-integration boundaries](docs/IMPLEMENTATION_STATUS.en.md)
+- [User-session browser extension](docs/BROWSER_EXTENSION.en.md)

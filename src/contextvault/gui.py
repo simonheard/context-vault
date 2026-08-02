@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import hmac
 import sqlite3
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -16,6 +17,7 @@ from contextvault.vault import initialize
 from contextvault.device_agent import scan_device
 from contextvault.pipeline import ImportPipeline
 from contextvault.sync_service import SyncService
+from contextvault.providers import provider_capabilities
 
 
 STATIC_TYPES = {
@@ -98,9 +100,26 @@ def serve(path: Path, host: str, port: int) -> None:
 
 def _handler_for(vault_path: Path) -> type[BaseHTTPRequestHandler]:
     class Handler(BaseHTTPRequestHandler):
+        def do_OPTIONS(self) -> None:  # noqa: N802
+            if self._extension_origin():
+                self.send_response(HTTPStatus.NO_CONTENT)
+                self._cors_headers()
+                self.send_header("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
+                self.send_header(
+                    "Access-Control-Allow-Headers",
+                    "Content-Type, X-ContextVault-Token",
+                )
+                self.send_header("Access-Control-Allow-Private-Network", "true")
+                self.end_headers()
+                return
+            self._json({"error": "Origin not allowed"}, HTTPStatus.FORBIDDEN)
+
         def do_GET(self) -> None:  # noqa: N802
             parsed = urlparse(self.path)
             route = parsed.path
+            if route.startswith("/api/") and not self._authorized():
+                self._json({"error": "Extension pairing token is invalid"}, HTTPStatus.FORBIDDEN)
+                return
             if route in STATIC_TYPES:
                 filename, content_type = STATIC_TYPES[route]
                 payload = files("contextvault").joinpath("web", filename).read_bytes()
@@ -164,10 +183,19 @@ def _handler_for(vault_path: Path) -> type[BaseHTTPRequestHandler]:
                     ).fetchone()
                 self._json({"sensitive_sync_enabled": bool(row and row[0] == "1")})
                 return
+            if route == "/api/providers":
+                self._json({"items": provider_capabilities()})
+                return
+            if route == "/api/extension/pairing":
+                self._json({"token": repository.extension_pairing_token()})
+                return
             self._json({"error": "Not found"}, HTTPStatus.NOT_FOUND)
 
         def do_POST(self) -> None:  # noqa: N802
             route = urlparse(self.path).path
+            if route.startswith("/api/") and not self._authorized():
+                self._json({"error": "Extension pairing token is invalid"}, HTTPStatus.FORBIDDEN)
+                return
             try:
                 body = self._read_json()
                 if route == "/api/accounts":
@@ -263,6 +291,13 @@ def _handler_for(vault_path: Path) -> type[BaseHTTPRequestHandler]:
                     if action == "sync":
                         self._json({"item": SyncService(repository).run(route_id, approved)})
                         return
+                if len(route_parts) == 4 and route_parts[:2] == ["api", "receipts"]:
+                    receipt_id, action = route_parts[2], route_parts[3]
+                    if action == "acknowledge":
+                        self._json(
+                            {"item": SyncService(repository).acknowledge(receipt_id)}
+                        )
+                        return
                 self._json({"error": "Not found"}, HTTPStatus.NOT_FOUND)
             except (ValueError, sqlite3.IntegrityError) as error:
                 self._json({"error": str(error)}, HTTPStatus.BAD_REQUEST)
@@ -299,11 +334,41 @@ def _handler_for(vault_path: Path) -> type[BaseHTTPRequestHandler]:
             self.send_header("Cache-Control", "no-store")
             self.send_header("X-Content-Type-Options", "nosniff")
             self.send_header("Content-Security-Policy", "default-src 'self'; script-src 'self'; style-src 'self'")
+            self._cors_headers()
             self.end_headers()
             self.wfile.write(payload)
+
+        def _extension_origin(self) -> str | None:
+            origin = self.headers.get("Origin", "")
+            return origin if origin.startswith("chrome-extension://") else None
+
+        def _authorized(self) -> bool:
+            if not self._extension_origin():
+                return True
+            supplied = self.headers.get("X-ContextVault-Token", "")
+            expected = VaultRepository(vault_path).extension_pairing_token()
+            return extension_request_authorized(
+                self._extension_origin(), supplied, expected
+            )
+
+        def _cors_headers(self) -> None:
+            origin = self._extension_origin()
+            if origin:
+                self.send_header("Access-Control-Allow-Origin", origin)
+                self.send_header("Vary", "Origin")
 
     return Handler
 
 
 def _count(connection: sqlite3.Connection, table: str) -> int:
     return int(connection.execute(f"SELECT COUNT(*) FROM {table}").fetchone()[0])
+
+
+def extension_request_authorized(
+    origin: str | None, supplied_token: str, expected_token: str
+) -> bool:
+    if not origin:
+        return True
+    if not origin.startswith("chrome-extension://"):
+        return False
+    return bool(supplied_token) and hmac.compare_digest(supplied_token, expected_token)

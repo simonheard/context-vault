@@ -321,7 +321,7 @@ class SyncService:
                 INSERT INTO sync_receipts(
                     id, target_id, route_id, profile_version, manifest_json,
                     status, created_at, completed_at
-                ) VALUES (?, ?, ?, ?, ?, 'completed', ?, ?)
+                ) VALUES (?, ?, ?, ?, ?, 'prepared', ?, NULL)
                 """,
                 (
                     receipt_id,
@@ -330,15 +330,10 @@ class SyncService:
                     version,
                     json.dumps(manifest, ensure_ascii=False, sort_keys=True),
                     now,
-                    now,
                 ),
             )
-            connection.execute(
-                "UPDATE sync_targets SET last_synced_at = ? WHERE id = ?",
-                (now, preview.target_id),
-            )
         self.repository.append_event(
-            "sync.completed",
+            "sync.prepared",
             "sync_receipt",
             receipt_id,
             {"route_id": route_id, "version": version, "claim_count": len(preview.included)},
@@ -350,6 +345,31 @@ class SyncService:
             "content": preview.content,
             "manifest": manifest,
         }
+
+    def acknowledge(self, receipt_id: str) -> dict[str, Any]:
+        now = utc_now()
+        with self.repository.transaction() as connection:
+            row = connection.execute(
+                "SELECT * FROM sync_receipts WHERE id = ?", (receipt_id,)
+            ).fetchone()
+            if row is None:
+                raise ValueError("Unknown sync receipt")
+            if row["status"] == "completed":
+                return dict(row)
+            if row["status"] != "prepared":
+                raise ValueError("Only a prepared receipt can be acknowledged")
+            connection.execute(
+                "UPDATE sync_receipts SET status = 'completed', completed_at = ? WHERE id = ?",
+                (now, receipt_id),
+            )
+            connection.execute(
+                "UPDATE sync_targets SET last_synced_at = ? WHERE id = ?",
+                (now, row["target_id"]),
+            )
+        self.repository.append_event(
+            "sync.completed", "sync_receipt", receipt_id, {"completed_at": now}
+        )
+        return next(item for item in self.list_receipts() if item["id"] == receipt_id)
 
     def list_receipts(self) -> list[dict[str, Any]]:
         with self.repository.transaction() as connection:

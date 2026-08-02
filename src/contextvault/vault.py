@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import sqlite3
+import secrets
 from dataclasses import dataclass
 from pathlib import Path
 from datetime import datetime, timezone
@@ -276,6 +277,10 @@ def initialize(path: Path) -> VaultStatus:
         connection.execute(
             "INSERT OR REPLACE INTO metadata(key, value) VALUES (?, ?)",
             ("schema_version", str(SCHEMA_VERSION)),
+        )
+        connection.execute(
+            "INSERT OR IGNORE INTO metadata(key, value) VALUES (?, ?)",
+            ("extension_pairing_token", secrets.token_urlsafe(32)),
         )
         now = datetime.now(timezone.utc).isoformat()
         connection.execute(

@@ -2,7 +2,7 @@
 
 [中文](IMPLEMENTATION_STATUS.md)
 
-## v0.7 local closed loop
+## v0.8 local closed loop and user-session adapters
 
 The following capabilities now run through the CLI or local management UI:
 
@@ -18,13 +18,15 @@ The following capabilities now run through the CLI or local management UI:
 - produce sync previews, blocked-field explanations, per-run confirmation, incremental diffs, Markdown packages, and sync receipts;
 - include provider attachment references or approved extracted text while keeping attachment binaries out of the database;
 - maintain an append-only event log, multi-device cursors, profile-health metrics, and schema migrations.
+- provide a Chrome MV3 extension for target-account confirmation, policy preview, and composer filling on the user's logged-in ChatGPT, Gemini, and Claude pages;
+- protect loopback extension APIs with a pairing token and track user-confirmed `prepared -> completed` receipts.
 
 ## Capabilities requiring an external platform or deployed infrastructure
 
 The following cannot be completed by a local repository without target-platform authorization, a logged-in browser session, or a sync server:
 
-- ChatGPT, Gemini, and Claude browser extensions and page-writing adapters;
 - official provider APIs, file upload, verified remote deletion, and post-sync question validation;
+- user-approved incremental capture of new conversations (the current extension writes but does not scrape history);
 - interactive attachment download and transfer between logged-in provider accounts;
 - a multi-device end-to-end encrypted server, key recovery, and device revocation;
 - optional local LLM and calendar, contacts, repository, or smart-home connectors.

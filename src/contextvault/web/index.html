@@ -136,6 +136,7 @@
             <article class="policy ask"><span>ASK</span><h3>每次询问</h3><p>同步前逐项展示并要求确认。</p></article>
             <article class="policy allow"><span>ALLOW</span><h3>允许自动同步</h3><p>仅限指定账号、类别和明确范围。</p></article>
           </div>
+          <article class="panel timeline-panel"><h3>浏览器扩展配对</h3><p class="form-hint">在 Chrome 的“加载已解压的扩展程序”中选择仓库的 <code>extension/</code> 目录，然后把下面 Token 粘贴到扩展。Token 只授权访问本机 ContextVault API，不是任何 AI 账号凭证。</p><div class="token-row"><input id="extension-token" type="password" readonly value="正在读取…"><button class="secondary" id="copy-extension-token">复制 Token</button></div></article>
         </section>
 
         <section class="view" id="history-view"><div class="section-intro"><div><h2>同步历史</h2><p>每次资料、账号和身份空间变化都进入只追加事件日志。</p></div></div><div class="grid two-columns"><article class="panel"><h3>事件日志</h3><div id="events-list" class="list"><p class="muted">正在读取…</p></div></article><article class="panel"><h3>同步回执</h3><div id="receipts-list" class="list"><p class="muted">正在读取…</p></div></article></div></section>

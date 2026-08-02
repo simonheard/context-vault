@@ -232,11 +232,12 @@ async function loadRoutes() {
 
 let sensitiveSyncEnabled = false;
 async function loadPrivacy() {
-  const result = await api("/api/privacy");
+  const [result, pairing] = await Promise.all([api("/api/privacy"), api("/api/extension/pairing")]);
   sensitiveSyncEnabled = result.sensitive_sync_enabled;
   document.getElementById("privacy-status").textContent = sensitiveSyncEnabled
     ? "当前开启；每条资料仍受路线级 block / ask / allow 策略约束。"
     : "当前关闭；所有私密和敏感资料都被强制阻止。";
+  document.getElementById("extension-token").value = pairing.token;
 }
 
 async function loadReceipts() {
@@ -247,7 +248,20 @@ async function loadReceipts() {
     list.append(emptyMessage("暂无同步回执。"));
     return;
   }
-  items.forEach((item) => list.append(listItem(item.profile_version, `${item.manifest.claims.length} claims`, item.status)));
+  items.forEach((item) => {
+    const row = listItem(item.profile_version, `${item.manifest.claims.length} claims`, item.status);
+    if (item.status === "prepared") {
+      const button = document.createElement("button");
+      button.className = "mini-button confirm";
+      button.textContent = "确认已发送";
+      button.addEventListener("click", async () => {
+        await api(`/api/receipts/${item.id}/acknowledge`, { method: "POST", body: "{}" });
+        await Promise.all([loadReceipts(), loadEvents()]);
+      });
+      row.querySelector(".chip").replaceWith(button);
+    }
+    list.append(row);
+  });
 }
 
 document.getElementById("account-form").addEventListener("submit", async (event) => {
@@ -354,6 +368,13 @@ document.getElementById("privacy-toggle").addEventListener("click", async () => 
   if (!sensitiveSyncEnabled && !window.confirm("开启后数据仍会受每条路线策略控制。发送到第三方后，ContextVault 无法保证对方删除或忘记内容。确定开启吗？")) return;
   await api(`/api/privacy/${action}`, { method: "POST", body: "{}" });
   await Promise.all([loadPrivacy(), loadEvents()]);
+});
+
+document.getElementById("copy-extension-token").addEventListener("click", async () => {
+  const input = document.getElementById("extension-token");
+  await navigator.clipboard.writeText(input.value);
+  input.type = "text";
+  window.setTimeout(() => { input.type = "password"; }, 5000);
 });
 
 Promise.all([loadDashboard(), loadAccounts(), loadSpaces(), loadClaims(), loadEvents(), loadDevices(), loadRoutes(), loadPrivacy(), loadReceipts()]).catch((error) => {

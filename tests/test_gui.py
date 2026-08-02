@@ -9,6 +9,7 @@ from contextvault.gui import (
     create_provider_account,
     dashboard_snapshot,
     list_rows,
+    extension_request_authorized,
 )
 from contextvault.vault import initialize
 
@@ -35,6 +36,13 @@ class GuiDataTests(unittest.TestCase):
 
             with self.assertRaisesRegex(ValueError, "Unsupported provider"):
                 create_provider_account(vault_path, "unknown", "Unknown")
+
+    def test_extension_requests_require_the_pairing_token(self) -> None:
+        origin = "chrome-extension://abcdefghijklmnop"
+        self.assertTrue(extension_request_authorized(None, "", "secret"))
+        self.assertTrue(extension_request_authorized(origin, "secret", "secret"))
+        self.assertFalse(extension_request_authorized(origin, "wrong", "secret"))
+        self.assertFalse(extension_request_authorized("https://example.com", "secret", "secret"))
 
 
 if __name__ == "__main__":

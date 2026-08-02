@@ -1,0 +1,37 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  test-and-package:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Test Python
+        run: PYTHONPATH=src python -m unittest discover -s tests -v
+      - name: Check extension JavaScript
+        run: |
+          node --check extension/content.js
+          node --check extension/popup.js
+          node --check src/contextvault/web/app.js
+      - name: Validate extension manifest
+        run: python -m json.tool extension/manifest.json >/dev/null
+      - name: Package extension
+        run: python scripts/package_extension.py
+      - uses: actions/upload-artifact@v4
+        with:
+          name: contextvault-extension
+          path: dist/contextvault-extension.zip
+          if-no-files-found: error

@@ -101,6 +101,12 @@ class RepositoryTests(unittest.TestCase):
         self.assertEqual(renamed.account_label, "Work")
         self.assertEqual(renamed.status, "disconnected")
 
+    def test_extension_pairing_token_can_be_revoked(self) -> None:
+        original = self.repository.extension_pairing_token()
+        rotated = self.repository.rotate_extension_pairing_token()
+        self.assertNotEqual(original, rotated)
+        self.assertEqual(self.repository.extension_pairing_token(), rotated)
+
     @patch("contextvault.device_agent.subprocess.run")
     @patch("contextvault.device_agent.shutil.which", return_value="/usr/bin/tool")
     def test_failed_tool_probe_is_not_reported(self, _which, run) -> None:

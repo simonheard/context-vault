@@ -60,7 +60,9 @@ class SyncServiceTests(unittest.TestCase):
 
         self.assertEqual(len(receipt["manifest"]["claims"]), 2)
         self.assertEqual(len(receipt["manifest"]["diff"]["added"]), 2)
-        self.assertEqual(len(self.sync.list_receipts()), 1)
+        self.assertEqual(self.sync.list_receipts()[0]["status"], "prepared")
+        self.sync.acknowledge(receipt["id"])
+        self.assertEqual(self.sync.list_receipts()[0]["status"], "completed")
 
     def test_allow_mode_requires_matching_active_consent(self) -> None:
         claim = self.profile.add_candidate(

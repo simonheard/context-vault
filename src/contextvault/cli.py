@@ -17,6 +17,7 @@ from contextvault.device_agent import scan_device
 from contextvault.pipeline import ImportPipeline
 from contextvault.summaries import SummaryService
 from contextvault.sync_service import SyncService
+from contextvault.providers import provider_capabilities
 
 
 DEFAULT_VAULT = Path(".contextvault/vault.sqlite")
@@ -170,6 +171,10 @@ def build_parser() -> argparse.ArgumentParser:
     sync_run.add_argument("--approve-sensitive", action="store_true")
     sync_run.add_argument("--output", type=Path, help="write the generated Markdown package")
     sync_commands.add_parser("receipts", help="list sync receipts")
+    sync_acknowledge = sync_commands.add_parser(
+        "acknowledge", help="mark a prepared receipt as sent by the user"
+    )
+    sync_acknowledge.add_argument("receipt_id")
 
     privacy_parser = subparsers.add_parser("privacy", help="manage sensitive-data consent")
     privacy_commands = privacy_parser.add_subparsers(dest="privacy_command", required=True)
@@ -187,6 +192,18 @@ def build_parser() -> argparse.ArgumentParser:
         "--type", choices=["personal", "full", "work", "project", "devices", "recent"], required=True
     )
     summary_parser.add_argument("--space", default="personal")
+
+    extension_parser = subparsers.add_parser(
+        "extension", help="pair the user-side browser extension"
+    )
+    extension_commands = extension_parser.add_subparsers(
+        dest="extension_command", required=True
+    )
+    extension_commands.add_parser("token", help="show the local pairing token")
+    extension_commands.add_parser(
+        "rotate-token", help="revoke paired extensions and issue a new token"
+    )
+    subparsers.add_parser("providers", help="show available user-side provider adapters")
     return parser
 
 
@@ -274,6 +291,8 @@ def main(argv: list[str] | None = None) -> int:
                             result["content"], encoding="utf-8"
                         )
                         result["output"] = str(args.output)
+                elif args.sync_command == "acknowledge":
+                    result = sync_service.acknowledge(args.receipt_id)
                 else:
                     result = sync_service.list_receipts()
             elif args.privacy_command == "enable-sensitive":
@@ -297,6 +316,18 @@ def main(argv: list[str] | None = None) -> int:
             return 0
         if args.command == "summary":
             print(SummaryService(VaultRepository(args.vault)).render(args.type, args.space))
+            return 0
+        if args.command == "extension":
+            repository = VaultRepository(args.vault)
+            token = (
+                repository.rotate_extension_pairing_token()
+                if args.extension_command == "rotate-token"
+                else repository.extension_pairing_token()
+            )
+            print(token)
+            return 0
+        if args.command == "providers":
+            print(json.dumps(provider_capabilities(), ensure_ascii=False, indent=2))
             return 0
         if args.command in {
             "accounts",

@@ -107,6 +107,17 @@ class RepositoryTests(unittest.TestCase):
         self.assertNotEqual(original, rotated)
         self.assertEqual(self.repository.extension_pairing_token(), rotated)
 
+    def test_client_protocol_registration_tracks_compatibility(self) -> None:
+        active = self.repository.register_client("extension-1", "extension", "0.2", 2)
+        future = self.repository.register_client("future", "extension", "9.0", 99)
+        self.assertEqual(active["status"], "active")
+        self.assertEqual(future["status"], "incompatible")
+        self.assertEqual(len(self.repository.list_clients()), 2)
+
+    def test_accepts_registered_domestic_provider(self) -> None:
+        account = self.repository.add_account("deepseek", "Personal DeepSeek")
+        self.assertEqual(account.platform, "deepseek")
+
     @patch("contextvault.device_agent.subprocess.run")
     @patch("contextvault.device_agent.shutil.which", return_value="/usr/bin/tool")
     def test_failed_tool_probe_is_not_reported(self, _which, run) -> None:

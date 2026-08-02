@@ -24,6 +24,8 @@ from contextvault.domain import (
 from contextvault.vault import initialize
 from contextvault.importers import ImportBundle, ImportedMessage
 from contextvault.security import find_secrets, reject_secrets
+from contextvault.providers import PROVIDERS
+from contextvault.protocol import PROTOCOL_VERSION, check_protocol
 
 
 class VaultRepository:
@@ -69,7 +71,7 @@ class VaultRepository:
     def add_account(self, platform: str, label: str) -> ProviderAccount:
         platform = platform.strip().lower()
         label = label.strip()
-        if platform not in {"chatgpt", "gemini", "claude", "other"}:
+        if platform not in {*PROVIDERS, "other"}:
             raise ValueError("Unsupported provider")
         if not 1 <= len(label) <= 80:
             raise ValueError("Account label must be between 1 and 80 characters")
@@ -730,6 +732,56 @@ class VaultRepository:
         with self.transaction() as connection:
             self._append_event(connection, event_type, aggregate_type, aggregate_id, payload)
 
+    def register_client(
+        self,
+        client_id: str,
+        client_type: str,
+        client_version: str,
+        protocol_version: int,
+    ) -> dict[str, Any]:
+        client_id = client_id.strip()
+        client_type = client_type.strip()
+        client_version = client_version.strip()
+        if not 1 <= len(client_id) <= 128:
+            raise ValueError("Client ID must be between 1 and 128 characters")
+        if not 1 <= len(client_type) <= 80:
+            raise ValueError("Client type must be between 1 and 80 characters")
+        if not 1 <= len(client_version) <= 80:
+            raise ValueError("Client version must be between 1 and 80 characters")
+        if protocol_version < 1:
+            raise ValueError("Protocol version must be positive")
+        compatibility = check_protocol(protocol_version)
+        now = utc_now()
+        status = "active" if compatibility.compatible else "incompatible"
+        with self.transaction() as connection:
+            connection.execute(
+                """
+                INSERT INTO sync_clients(
+                    id, client_type, client_version, protocol_version, status, last_seen_at
+                ) VALUES (?, ?, ?, ?, ?, ?)
+                ON CONFLICT(id) DO UPDATE SET
+                    client_type = excluded.client_type,
+                    client_version = excluded.client_version,
+                    protocol_version = excluded.protocol_version,
+                    status = excluded.status,
+                    last_seen_at = excluded.last_seen_at
+                """,
+                (client_id, client_type, client_version, protocol_version, status, now),
+            )
+        return {
+            "id": client_id,
+            "status": status,
+            "compatibility": compatibility.__dict__,
+            "last_seen_at": now,
+        }
+
+    def list_clients(self) -> list[dict[str, Any]]:
+        with self.transaction() as connection:
+            rows = connection.execute(
+                "SELECT * FROM sync_clients ORDER BY last_seen_at DESC"
+            ).fetchall()
+        return [dict(row) for row in rows]
+
     def _append_event(
         self,
         connection: sqlite3.Connection,
@@ -743,8 +795,8 @@ class VaultRepository:
             """
             INSERT INTO sync_events(
                 event_id, device_id, event_type, aggregate_type, aggregate_id,
-                payload_json, created_at
-            ) VALUES (?, ?, ?, ?, ?, ?, ?)
+                payload_json, protocol_version, created_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 f"event_{uuid4().hex}",
@@ -753,6 +805,7 @@ class VaultRepository:
                 aggregate_type,
                 aggregate_id,
                 json.dumps(payload, ensure_ascii=False, sort_keys=True),
+                PROTOCOL_VERSION,
                 utc_now(),
             ),
         )

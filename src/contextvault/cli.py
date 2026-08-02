@@ -17,7 +17,9 @@ from contextvault.device_agent import scan_device
 from contextvault.pipeline import ImportPipeline
 from contextvault.summaries import SummaryService
 from contextvault.sync_service import SyncService
-from contextvault.providers import provider_capabilities
+from contextvault.providers import PROVIDERS, provider_capabilities
+from contextvault.cli_adapters import CLI_TOOLS, CliAdapterService
+from contextvault.daemon_service import daemon_status, install_daemon, uninstall_daemon
 
 
 DEFAULT_VAULT = Path(".contextvault/vault.sqlite")
@@ -44,7 +46,7 @@ def build_parser() -> argparse.ArgumentParser:
     account_commands = accounts_parser.add_subparsers(dest="account_command", required=True)
     account_commands.add_parser("list", help="list provider accounts")
     account_add = account_commands.add_parser("add", help="add a provider account reference")
-    account_add.add_argument("--platform", required=True, choices=["chatgpt", "gemini", "claude", "other"])
+    account_add.add_argument("--platform", required=True, choices=[*PROVIDERS, "other"])
     account_add.add_argument("--label", required=True)
     account_rename = account_commands.add_parser("rename", help="rename a local account label")
     account_rename.add_argument("account_id")
@@ -163,6 +165,13 @@ def build_parser() -> argparse.ArgumentParser:
     route_preview.add_argument("--approve-sensitive", action="store_true")
     route_disable = route_commands.add_parser("disable", help="disable a sync route")
     route_disable.add_argument("route_id")
+    route_automation = route_commands.add_parser(
+        "automation", help="configure unattended browser synchronization"
+    )
+    route_automation.add_argument("route_id")
+    route_automation.add_argument("--mode", choices=["manual", "full"], required=True)
+    route_automation.add_argument("--interval", type=int, default=60)
+    route_automation.add_argument("--acknowledge-data-risk", action="store_true")
 
     sync_parser = subparsers.add_parser("sync", help="create a local sync package and receipt")
     sync_commands = sync_parser.add_subparsers(dest="sync_command", required=True)
@@ -204,6 +213,35 @@ def build_parser() -> argparse.ArgumentParser:
         "rotate-token", help="revoke paired extensions and issue a new token"
     )
     subparsers.add_parser("providers", help="show available user-side provider adapters")
+
+    cli_parser = subparsers.add_parser("cli", help="sync profiles into coding-agent context files")
+    cli_commands = cli_parser.add_subparsers(dest="cli_command", required=True)
+    cli_commands.add_parser("list", help="list supported coding CLI tools")
+    cli_commands.add_parser("status", help="list installed context-file adapters")
+    cli_install = cli_commands.add_parser("install", help="install or update a managed context block")
+    cli_install.add_argument("tool", choices=list(CLI_TOOLS))
+    cli_install.add_argument("--scope", choices=["project", "global"], default="project")
+    cli_install.add_argument("--directory", type=Path, default=Path.cwd())
+    cli_install.add_argument("--space", default="personal")
+    cli_install.add_argument(
+        "--summary-type",
+        choices=["personal", "full", "work", "project", "devices", "recent"],
+        default="personal",
+    )
+    cli_sync = cli_commands.add_parser("sync", help="update every installed CLI context")
+    cli_sync.add_argument("--tool", choices=list(CLI_TOOLS))
+    cli_watch = cli_commands.add_parser("watch", help="continuously update installed contexts")
+    cli_watch.add_argument("--interval", type=int, default=60)
+
+    daemon_parser = subparsers.add_parser(
+        "daemon", help="keep the local API available after user login"
+    )
+    daemon_commands = daemon_parser.add_subparsers(dest="daemon_command", required=True)
+    daemon_install = daemon_commands.add_parser("install", help="install and start a user service")
+    daemon_install.add_argument("--host", default="127.0.0.1")
+    daemon_install.add_argument("--port", type=int, default=8787)
+    daemon_commands.add_parser("status", help="show user-service installation status")
+    daemon_commands.add_parser("uninstall", help="stop and remove the user service")
     return parser
 
 
@@ -281,6 +319,13 @@ def main(argv: list[str] | None = None) -> int:
                 elif args.route_command == "disable":
                     sync_service.disable_route(args.route_id)
                     result = {"route_id": args.route_id, "enabled": False}
+                elif args.route_command == "automation":
+                    result = sync_service.configure_automation(
+                        args.route_id,
+                        enabled=args.mode == "full",
+                        interval_minutes=args.interval,
+                        risk_acknowledged=args.acknowledge_data_risk,
+                    )
                 else:
                     result = sync_service.list_routes()
             elif args.command == "sync":
@@ -328,6 +373,42 @@ def main(argv: list[str] | None = None) -> int:
             return 0
         if args.command == "providers":
             print(json.dumps(provider_capabilities(), ensure_ascii=False, indent=2))
+            return 0
+        if args.command == "cli":
+            service = CliAdapterService(VaultRepository(args.vault))
+            if args.cli_command == "list":
+                result = service.tools()
+            elif args.cli_command == "status":
+                result = service.installations()
+            elif args.cli_command == "install":
+                result = service.install(
+                    args.tool,
+                    scope=args.scope,
+                    directory=args.directory,
+                    space=args.space,
+                    summary_type=args.summary_type,
+                )
+            elif args.cli_command == "sync":
+                result = service.sync(args.tool)
+            else:
+                print("Watching ContextVault profile changes. Press Ctrl-C to stop.")
+                try:
+                    service.watch(args.interval)
+                except KeyboardInterrupt:
+                    print("Stopped.")
+                return 0
+            print(json.dumps(result, ensure_ascii=False, indent=2))
+            return 0
+        if args.command == "daemon":
+            if args.daemon_command == "install":
+                result = install_daemon(
+                    args.vault, host=args.host, port=args.port
+                )
+            elif args.daemon_command == "uninstall":
+                result = uninstall_daemon()
+            else:
+                result = daemon_status()
+            print(json.dumps(result, ensure_ascii=False, indent=2))
             return 0
         if args.command in {
             "accounts",

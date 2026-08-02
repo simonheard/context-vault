@@ -23,7 +23,7 @@ class CliTests(unittest.TestCase):
 
             self.assertEqual(init_code, 0)
             self.assertEqual(status_code, 0)
-            self.assertEqual(status(vault_path).schema_version, 7)
+            self.assertEqual(status(vault_path).schema_version, 8)
             self.assertIn("Claims: 0", output.getvalue())
             self.assertIn("Devices: 0", output.getvalue())
             self.assertIn("Provider accounts: 0", output.getvalue())
@@ -60,6 +60,8 @@ class CliTests(unittest.TestCase):
                     "source_imports",
                     "evidence_messages",
                     "generated_summaries",
+                    "cli_installations",
+                    "sync_clients",
                     "claims_fts",
                 }.issubset(tables)
             )

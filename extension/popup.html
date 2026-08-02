@@ -23,9 +23,16 @@
       <div id="policy-result" class="hint"></div>
       <button id="inject" disabled>填入当前 AI 输入框</button>
       <button id="acknowledge" class="secondary" disabled>我已经在页面中发送</button>
-      <p class="warning">扩展不会读取或上传 Cookie，也不会自动点击发送。请在目标页面检查内容后自行发送。</p>
+      <fieldset>
+        <legend>全自动模式</legend>
+        <label>最短同步间隔（分钟）<input id="automation-interval" type="number" min="5" max="10080" value="60"></label>
+        <label class="check"><input id="automation-risk" type="checkbox"><span>我理解扩展会定期开启或复用目标页面并自动点击发送；可能把资料发到错误登录账号，且第三方可能保留数据。我已检查 route 白名单和敏感策略。</span></label>
+        <div class="actions"><button id="enable-automation">开启全自动</button><button id="disable-automation" class="secondary">关闭全自动</button></div>
+      </fieldset>
+      <p class="warning">扩展不会读取或上传 Cookie。半自动模式不点击发送；只有你明确开启全自动模式后才会定期打开页面并点击明确识别的发送按钮。</p>
     </section>
     <p id="message" role="status"></p>
+    <script src="providers.js"></script>
     <script src="popup.js"></script>
   </body>
 </html>

@@ -7,7 +7,7 @@ from pathlib import Path
 from datetime import datetime, timezone
 
 
-SCHEMA_VERSION = 7
+SCHEMA_VERSION = 8
 
 
 @dataclass(frozen=True)
@@ -185,6 +185,7 @@ def initialize(path: Path) -> VaultStatus:
                 aggregate_type TEXT NOT NULL,
                 aggregate_id TEXT NOT NULL,
                 payload_json TEXT NOT NULL,
+                protocol_version INTEGER NOT NULL DEFAULT 1,
                 created_at TEXT NOT NULL
             );
 
@@ -233,6 +234,29 @@ def initialize(path: Path) -> VaultStatus:
                 created_at TEXT NOT NULL
             );
 
+            CREATE TABLE IF NOT EXISTS cli_installations (
+                id TEXT PRIMARY KEY,
+                tool TEXT NOT NULL,
+                scope TEXT NOT NULL,
+                path TEXT NOT NULL,
+                space_name TEXT NOT NULL,
+                summary_type TEXT NOT NULL,
+                last_profile_version TEXT,
+                enabled INTEGER NOT NULL DEFAULT 1 CHECK (enabled IN (0, 1)),
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL,
+                UNIQUE(tool, path)
+            );
+
+            CREATE TABLE IF NOT EXISTS sync_clients (
+                id TEXT PRIMARY KEY,
+                client_type TEXT NOT NULL,
+                client_version TEXT NOT NULL,
+                protocol_version INTEGER NOT NULL,
+                status TEXT NOT NULL,
+                last_seen_at TEXT NOT NULL
+            );
+
             CREATE VIRTUAL TABLE IF NOT EXISTS claims_fts USING fts5(
                 claim_id UNINDEXED,
                 attribute,
@@ -274,6 +298,12 @@ def initialize(path: Path) -> VaultStatus:
             "route_id",
             "TEXT REFERENCES sync_routes(id) ON DELETE SET NULL",
         )
+        _ensure_column(
+            connection,
+            "sync_events",
+            "protocol_version",
+            "INTEGER NOT NULL DEFAULT 1",
+        )
         connection.execute(
             "INSERT OR REPLACE INTO metadata(key, value) VALUES (?, ?)",
             ("schema_version", str(SCHEMA_VERSION)),
@@ -281,6 +311,9 @@ def initialize(path: Path) -> VaultStatus:
         connection.execute(
             "INSERT OR IGNORE INTO metadata(key, value) VALUES (?, ?)",
             ("extension_pairing_token", secrets.token_urlsafe(32)),
+        )
+        connection.execute(
+            "INSERT OR REPLACE INTO metadata(key, value) VALUES ('protocol_version', '2')"
         )
         now = datetime.now(timezone.utc).isoformat()
         connection.execute(

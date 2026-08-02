@@ -1,11 +1,5 @@
-const providerHosts = {
-  "chatgpt.com": "chatgpt",
-  "chat.openai.com": "chatgpt",
-  "gemini.google.com": "gemini",
-  "claude.ai": "claude",
-};
-
-const state = { base: "", token: "", tab: null, provider: null, routes: [], preview: null, receiptId: null };
+const PROTOCOL_VERSION = 2;
+const state = { base: "", token: "", tab: null, provider: null, routes: [], preview: null, receiptId: null, clientId: null };
 const $ = (id) => document.getElementById(id);
 
 async function api(path, options = {}) {
@@ -14,6 +8,7 @@ async function api(path, options = {}) {
     headers: {
       "Content-Type": "application/json",
       "X-ContextVault-Token": state.token,
+      "X-ContextVault-Protocol": String(PROTOCOL_VERSION),
       ...(options.headers || {}),
     },
   });
@@ -37,11 +32,27 @@ async function connect() {
   if (!/^http:\/\/(127\.0\.0\.1|localhost):\d+$/.test(state.base)) throw new Error("只允许连接本机 HTTP 服务");
   if (!state.token) throw new Error("请输入配对 Token");
   await chrome.storage.local.set({ base: state.base, token: state.token });
+  const version = await api("/api/version");
+  if (PROTOCOL_VERSION < version.minimum_protocol_version || PROTOCOL_VERSION > version.protocol_version) {
+    throw new Error(`扩展协议 ${PROTOCOL_VERSION} 与本地服务协议 ${version.protocol_version} 不兼容，请升级较旧的一端。`);
+  }
+  const stored = await chrome.storage.local.get(["clientId"]);
+  state.clientId = stored.clientId || crypto.randomUUID();
+  await chrome.storage.local.set({ clientId: state.clientId });
+  await api("/api/clients/register", {
+    method: "POST",
+    body: JSON.stringify({
+      id: state.clientId,
+      client_type: "chrome-extension",
+      client_version: chrome.runtime.getManifest().version,
+      protocol_version: PROTOCOL_VERSION,
+    }),
+  });
   const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
   state.tab = tab;
   const hostname = new URL(tab.url).hostname;
-  state.provider = providerHosts[hostname];
-  if (!state.provider) throw new Error("请在 ChatGPT、Gemini 或 Claude 页面打开扩展");
+  state.provider = contextVaultProviderForHostname(hostname);
+  if (!state.provider) throw new Error("请在受支持的 AI 对话页面打开扩展");
   const probe = await chrome.tabs.sendMessage(tab.id, { type: "contextvault:probe" });
   $("page-status").textContent = probe.ready
     ? `已识别 ${state.provider}，登录态输入框可用`
@@ -112,6 +123,19 @@ async function acknowledge() {
   message("已记录为完成。ContextVault 现在会把该版本用于后续 diff。");
 }
 
+async function configureAutomation(enabled) {
+  const route = selectedRoute();
+  if (!route) throw new Error("请选择同步路线");
+  const risk = $("automation-risk").checked;
+  if (enabled && !risk) throw new Error("开启全自动前必须阅读并勾选数据安全风险提示");
+  const interval = Number($("automation-interval").value);
+  const { item } = await api(`/api/routes/${route.id}/automation`, {
+    method: "POST",
+    body: JSON.stringify({ enabled, interval_minutes: interval, risk_acknowledged: risk }),
+  });
+  message(enabled ? `全自动已开启，最短间隔 ${item.interval_minutes} 分钟` : "全自动已关闭");
+}
+
 async function run(action) {
   try { await action(); } catch (error) { message(error.message, true); }
 }
@@ -125,6 +149,8 @@ $("sensitive-confirm").addEventListener("change", () => { state.preview = null; 
 $("preview").addEventListener("click", () => run(preview));
 $("inject").addEventListener("click", () => run(prepareAndInject));
 $("acknowledge").addEventListener("click", () => run(acknowledge));
+$("enable-automation").addEventListener("click", () => run(() => configureAutomation(true)));
+$("disable-automation").addEventListener("click", () => run(() => configureAutomation(false)));
 $("copy").addEventListener("click", () => run(async () => {
   await navigator.clipboard.writeText($("preview-content").value);
   message("预览已复制到剪贴板");

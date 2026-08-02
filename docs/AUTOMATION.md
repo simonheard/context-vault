@@ -1,0 +1,41 @@
+# 全自动同步
+
+[English](AUTOMATION.en.md)
+
+## 模式
+
+- `manual`：生成资料包或复制文本；
+- 半自动：扩展预览并填入输入框，用户点击发送；
+- `full`：扩展每五分钟检查任务；达到 route 间隔且存在 diff 时，复用或打开目标页面、填入并点击明确识别的发送按钮。
+
+全自动默认关闭。开启必须逐 route 确认以下风险：当前浏览器可能登录错误账号；目标平台可能保留、
+分析或训练发送数据；页面变化可能造成发送失败；关闭只阻止未来发送，不能撤回历史内容。
+
+```bash
+contextvault routes automation <route-id> \
+  --mode full --interval 60 --acknowledge-data-risk
+```
+
+## 不可绕过的控制
+
+- `secret` 永不保存和发送；
+- 全局敏感开关关闭时，private/sensitive 仍被阻止；
+- `ask` 字段不会进入全自动任务；
+- `allow` 私密字段仍要求目标账号、类别匹配的有效 ConsentReceipt；
+- 没有 diff 不发送；同一 route 存在 prepared receipt 时不重复发送；
+- 找不到输入框或明确发送按钮时安全停止；失败 receipt 可追踪并允许重试；
+- 自动模式不抓 Cookie，不在服务器模拟登录。
+
+运行 `contextvault daemon install` 可把 loopback API 安装为 macOS LaunchAgent、Linux systemd user
+service 或 Windows 登录任务。完成一次安装和扩展配对后，日常只需保持浏览器登录；后台服务与扩展
+会在用户登录系统和启动 Chrome 后恢复。
+
+DOM 自动化不能证明平台已经理解或永久保存资料；`completed` 只表示扩展点击了已识别发送按钮，
+不是远程读取或删除证明。
+
+## 为什么主线不使用油猴脚本
+
+Chrome MV3 扩展可以集中声明最小域名权限、使用受浏览器管理的本地存储和定时任务，并与服务端做
+协议握手和统一升级。油猴脚本依赖额外脚本管理器，权限和升级状态更难审计，多服务商选择器也容易
+分叉。因此当前扩展已能实现全自动时，不再提供一个同功能、风险更高的油猴版本；只有某个平台明确
+阻止扩展内容脚本、且没有官方 API 时，才考虑为该平台提供单独、默认关闭的 fallback。

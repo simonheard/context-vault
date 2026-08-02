@@ -23,7 +23,7 @@ The current implementation provides:
 - identity-space listing and creation;
 - manual candidates, ChatGPT export import, and individual/bulk review;
 - allowlisted device scanning and device-environment listing;
-- route creation, policy configuration, final-content preview, and receipt generation;
+- route creation, semi/full automation policy, interval and risk acknowledgement, final preview, and receipts;
 - the sensitive-sync master gate, risk confirmation, event history, and sync receipts;
 - responsive desktop and mobile layout;
 - loopback-only binding that rejects public addresses.

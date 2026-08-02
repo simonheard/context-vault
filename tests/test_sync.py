@@ -93,6 +93,30 @@ class SyncServiceTests(unittest.TestCase):
 
         self.assertEqual(len(self.sync.preview(route["id"]).included), 1)
 
+    def test_full_automation_requires_warning_and_only_runs_changed_routes(self) -> None:
+        claim = self.profile.add_candidate(attribute="identity.name", value="Simon")
+        self.profile.confirm(claim.id)
+        route = self.sync.add_route(
+            source_account_id=self.source.id,
+            space="personal",
+            target_account_id=self.target.id,
+        )
+        with self.assertRaisesRegex(ValueError, "risk acknowledgement"):
+            self.sync.configure_automation(route["id"], enabled=True)
+
+        self.sync.configure_automation(
+            route["id"], enabled=True, interval_minutes=5, risk_acknowledged=True
+        )
+        self.assertEqual(len(self.sync.automation_jobs()), 1)
+        prepared = self.sync.run_automation(route["id"])
+        self.assertEqual(self.sync.automation_jobs(), [])
+        failed = self.sync.fail_receipt(prepared["id"], "composer changed")
+        self.assertEqual(failed["status"], "failed")
+        self.assertEqual(len(self.sync.automation_jobs()), 1)
+        retry = self.sync.run_automation(route["id"])
+        self.sync.acknowledge(retry["id"])
+        self.assertEqual(self.sync.automation_jobs(), [])
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -20,4 +20,6 @@ button.secondary { color: #18221c; background: white; border: 1px solid #cfd8d1;
 .status { border-radius: 8px; padding: 8px; background: #e5f1e9; color: #155438; }
 .hint { color: #68736c; }
 .warning { color: #80501a; margin: 0; }
+fieldset { display: grid; gap: 10px; border: 1px solid #d7b97c; border-radius: 8px; padding: 10px; background: #fff8e9; }
+legend { color: #80501a; font-size: 12px; font-weight: 800; }
 #message { color: #9c3c3c; min-height: 16px; margin: 10px 0 0; }

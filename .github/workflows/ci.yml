@@ -24,6 +24,8 @@ jobs:
       - name: Check extension JavaScript
         run: |
           node --check extension/content.js
+          node --check extension/providers.js
+          node --check extension/background.js
           node --check extension/popup.js
           node --check src/contextvault/web/app.js
       - name: Validate extension manifest

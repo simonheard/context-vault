@@ -2,7 +2,7 @@
 
 [English](IMPLEMENTATION_STATUS.en.md)
 
-## v0.8 本地闭环与用户登录态适配器
+## v0.9 自动化、CLI 与兼容协议
 
 以下能力已经可以通过 CLI 或本地管理后台运行：
 
@@ -18,8 +18,11 @@
 - 同步预览、被阻止字段、逐次确认、增量 diff、Markdown 资料包和同步回执；
 - 附件引用、已批准提取文本和即时转传适配器边界；数据库不保存附件二进制；
 - 只追加事件日志、多设备增量游标、资料健康度和 schema 迁移。
-- Chrome MV3 扩展，在用户自己登录的 ChatGPT、Gemini 和 Claude 页面中执行账号确认、策略预览和输入框填入；
-- 扩展配对 Token、loopback API 校验，以及 `prepared -> completed` 的用户确认回执流程。
+- 18 个国际与国产网页服务商的统一注册表和 Chrome MV3 页面适配；
+- 半自动预览/填入，以及逐路线风险确认、定时调度、安全按钮探测、失败重试的全自动模式；
+- Codex、Claude Code、Gemini CLI 等九种编程助手的项目级/全局托管资料块；
+- macOS LaunchAgent、Linux systemd user service 和 Windows Task Scheduler 常驻服务定义；
+- protocol 2 / schema 8 兼容协商、客户端登记和 CLI 托管块原位升级。
 
 ## 需要外部平台或部署基础设施的能力
 
@@ -28,7 +31,7 @@
 - 各平台官方 API、文件上传、远程删除结果和同步后问答验证；
 - 用户主动批准的新对话增量捕获（目前扩展只写入，不读取历史对话）；
 - 附件即时下载并转传到另一个已登录账号；
-- 多设备端到端加密服务器、密钥恢复和设备撤销；
+- 多设备端到端加密同步服务器、密钥恢复和设备撤销（当前已实现事件游标和协议边界）；
 - 可选本地 LLM 与日历、联系人、代码仓库、智能家居连接器。
 
 本地代码已经为这些功能提供 route、manifest、receipt、event cursor 和 provider adapter 边界。
@@ -49,5 +52,9 @@ contextvault privacy enable-sensitive
 contextvault privacy consent <route-id> --categories health,finance --mode ask
 contextvault sync run <route-id> --output gemini-profile.md
 contextvault sync receipts
+contextvault routes automation <route-id> --mode full --interval 60 --acknowledge-data-risk
+contextvault cli install codex --scope project
+contextvault cli sync
+contextvault daemon install
 contextvault ui
 ```

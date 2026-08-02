@@ -4,14 +4,14 @@
 
 ## How it works
 
-The extension uses ChatGPT, Gemini, or Claude pages where the user is already signed in through Chrome. ContextVault never reads, stores, or uploads passwords, cookies, OAuth tokens, or sessions. The extension only:
+The extension uses supported AI pages where the user is already signed in through Chrome. ContextVault never reads, stores, or uploads passwords, cookies, OAuth tokens, or sessions. The extension only:
 
 1. identifies the supported provider and checks that a composer is available;
 2. reads the configured route preview from `127.0.0.1:8787`;
 3. displays final text, policy-blocked fields, and sensitive fields requiring per-run approval;
-4. requires the user to confirm that the page is signed in to the route's target account;
-5. fills the approved text into the composer without clicking Send;
-6. lets the user acknowledge a `prepared` receipt as `completed` after manually sending.
+4. in semi-automatic mode, asks the user to confirm the target account and leaves sending to the user;
+5. in full-automation mode, opens or reuses the target page on schedule and clicks only an explicitly recognized enabled Send control;
+6. records `completed` after the click, or `failed` when page probing cannot safely continue.
 
 If a provider changes its page structure and the composer adapter stops working, the user can still use the extension's Copy button or generate a Markdown file through the CLI.
 
@@ -37,7 +37,7 @@ If a provider changes its page structure and the composer adapter stops working,
    It is also available on the management UI's Privacy page.
 
 5. Paste the token into the extension and save. It authorizes only local ContextVault API access.
-6. Sign in normally to ChatGPT, Gemini, or Claude, open a conversation, and select the extension icon.
+6. Sign in normally to the target AI, open a conversation, and select the extension icon.
 
 Run `contextvault extension rotate-token` when an already paired extension is no longer trusted. Every old token becomes invalid immediately, and retained extensions must pair again with the new token.
 
@@ -50,7 +50,7 @@ contextvault accounts add --platform gemini --label "Personal Gemini"
 contextvault routes add --space personal --to <gemini-account-id>
 ```
 
-The extension shows only enabled routes whose target provider matches the current page. With multiple accounts on one provider, it never guesses the active identity; the user must confirm the target account label before every fill operation.
+The extension shows only enabled routes whose target provider matches the current page. Semi-automatic mode requires account confirmation each time. Full automation cannot reliably inspect the provider account identity, so it requires a risk acknowledgement; using one target account per Chrome Profile is recommended.
 
 ## Security boundary
 
@@ -58,8 +58,8 @@ The extension shows only enabled routes whose target provider matches the curren
 - extension requests require a random vault pairing token;
 - the token lives in Chrome extension local storage and is not a provider credential;
 - the extension never reads cookies, scrapes conversation history, or simulates server-side login;
-- it does not send automatically or auto-approve `ask` sensitivity fields;
+- full automation is off by default and requires per-route risk acknowledgement; `secret` data is never sent and `ask` fields are never approved automatically;
 - `prepared` means content was generated or filled; only user acknowledgement after sending makes it `completed`;
 - a failed page adapter stops safely and does not click unknown elements.
 
-Composer filling currently supports ChatGPT, Gemini, and Claude. Interactive attachment transfer still requires a provider-specific file picker or official upload API; the extension does not bypass browser file permissions.
+The registry covers 18 global and Chinese web providers; see the [provider adapter matrix](PROVIDERS.en.md). DOM adapters can fall back to copy mode when a provider changes its page. Interactive attachment transfer still requires a provider-specific picker or official API.

@@ -77,7 +77,7 @@ ChatGPT 历史对话       设备扫描       手动填写       其他数据源
 
 ## 当前仓库状态
 
-当前已经具备可运行的本地完整闭环和用户登录态适配器（v0.8.0），包含：
+当前已经具备可运行的本地完整闭环、用户登录态适配器和 CLI 适配器（v0.9.0），包含：
 
 - 零依赖 Python CLI；
 - SQLite 资料库与显式领域模型，核心对象为 `Entity`、`Claim`、`ProviderAccount`、`ProfileSpace` 和 `AttachmentRef`；
@@ -89,7 +89,10 @@ ChatGPT 历史对话       设备扫描       手动填写       其他数据源
 - 可操作的本地管理 GUI，以及覆盖核心闭环的自动化测试。
 - ChatGPT 官方导出解析、入库前秘密脱敏和确定性中英文候选提取；
 - 设备扫描、同步策略、预览 diff、资料包、知情同意与同步回执。
-- Chrome 用户侧扩展：在用户自己登录的 ChatGPT、Gemini、Claude 页面填入已批准资料，不接触认证凭证且不自动发送。
+- 18 个网页 AI 适配器，覆盖 ChatGPT、Gemini、Claude、DeepSeek、Kimi、通义千问、豆包、腾讯元宝等国际与国产服务商；
+- Chrome 用户侧扩展：半自动预览/填入，以及显式风险确认后的定时全自动发送；
+- Codex、Claude Code、Gemini CLI、Cursor、Copilot、Cline、Windsurf、Aider 和 OpenCode 的项目级或全局资料文件适配器；
+- schema、事件和客户端协议版本协商，以及 CLI 托管块的原位升级。
 
 ## 快速开始
 
@@ -114,13 +117,16 @@ contextvault devices scan
 contextvault routes preview <route-id>
 contextvault sync run <route-id> --output gemini-profile.md
 contextvault extension token
-python3 -m unittest discover -s tests
+contextvault cli install codex --scope project
+contextvault cli install claude-code --scope project
+contextvault cli sync
+contextvault daemon install
+PYTHONPATH=src python3 -m unittest discover -s tests
 ```
 
-## 后续规划命令
+## 尚需外部基础设施
 
 ```text
-浏览器扩展捕获用户主动批准的增量对话
 各平台官方 API 与附件上传适配器
 端到端加密多设备同步服务器
 可选本地 LLM 与外部数据连接器
@@ -138,3 +144,7 @@ python3 -m unittest discover -s tests
 - [附件引用与跨 AI 处理](docs/ATTACHMENTS.md)
 - [实现状态与外部集成边界](docs/IMPLEMENTATION_STATUS.md)
 - [用户登录态浏览器扩展](docs/BROWSER_EXTENSION.md)
+- [服务商适配矩阵](docs/PROVIDERS.md)
+- [CLI 与编程助手适配器](docs/CLI_ADAPTERS.md)
+- [全自动模式与安全边界](docs/AUTOMATION.md)
+- [跨版本同步协议](docs/VERSIONING.md)

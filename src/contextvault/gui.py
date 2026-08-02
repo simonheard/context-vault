@@ -18,6 +18,13 @@ from contextvault.device_agent import scan_device
 from contextvault.pipeline import ImportPipeline
 from contextvault.sync_service import SyncService
 from contextvault.providers import provider_capabilities
+from contextvault.protocol import (
+    MIN_PROTOCOL_VERSION,
+    PROTOCOL_VERSION,
+    check_protocol,
+)
+from contextvault import __version__
+from contextvault.vault import SCHEMA_VERSION
 
 
 STATIC_TYPES = {
@@ -107,7 +114,7 @@ def _handler_for(vault_path: Path) -> type[BaseHTTPRequestHandler]:
                 self.send_header("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
                 self.send_header(
                     "Access-Control-Allow-Headers",
-                    "Content-Type, X-ContextVault-Token",
+                    "Content-Type, X-ContextVault-Token, X-ContextVault-Protocol",
                 )
                 self.send_header("Access-Control-Allow-Private-Network", "true")
                 self.end_headers()
@@ -119,6 +126,9 @@ def _handler_for(vault_path: Path) -> type[BaseHTTPRequestHandler]:
             route = parsed.path
             if route.startswith("/api/") and not self._authorized():
                 self._json({"error": "Extension pairing token is invalid"}, HTTPStatus.FORBIDDEN)
+                return
+            if not self._protocol_allowed(route):
+                self._protocol_error()
                 return
             if route in STATIC_TYPES:
                 filename, content_type = STATIC_TYPES[route]
@@ -186,6 +196,19 @@ def _handler_for(vault_path: Path) -> type[BaseHTTPRequestHandler]:
             if route == "/api/providers":
                 self._json({"items": provider_capabilities()})
                 return
+            if route == "/api/version":
+                self._json(
+                    {
+                        "server_version": __version__,
+                        "schema_version": SCHEMA_VERSION,
+                        "protocol_version": PROTOCOL_VERSION,
+                        "minimum_protocol_version": MIN_PROTOCOL_VERSION,
+                    }
+                )
+                return
+            if route == "/api/automation/jobs":
+                self._json({"items": SyncService(repository).automation_jobs()})
+                return
             if route == "/api/extension/pairing":
                 self._json({"token": repository.extension_pairing_token()})
                 return
@@ -195,6 +218,9 @@ def _handler_for(vault_path: Path) -> type[BaseHTTPRequestHandler]:
             route = urlparse(self.path).path
             if route.startswith("/api/") and not self._authorized():
                 self._json({"error": "Extension pairing token is invalid"}, HTTPStatus.FORBIDDEN)
+                return
+            if not self._protocol_allowed(route):
+                self._protocol_error()
                 return
             try:
                 body = self._read_json()
@@ -243,6 +269,13 @@ def _handler_for(vault_path: Path) -> type[BaseHTTPRequestHandler]:
                     return
                 sync_service = SyncService(repository)
                 if route == "/api/routes":
+                    if (
+                        str(body.get("automation_mode", "manual")) == "full"
+                        and not body.get("risk_acknowledged")
+                    ):
+                        raise ValueError(
+                            "Full automation requires explicit data-risk acknowledgement"
+                        )
                     item = sync_service.add_route(
                         source_account_id=(
                             str(body["source_account_id"])
@@ -266,12 +299,30 @@ def _handler_for(vault_path: Path) -> type[BaseHTTPRequestHandler]:
                             ),
                         },
                     )
+                    if str(body.get("automation_mode", "manual")) == "full":
+                        sync_service.configure_automation(
+                            str(item["id"]),
+                            enabled=True,
+                            interval_minutes=int(
+                                body.get("automation_interval_minutes", 60)
+                            ),
+                            risk_acknowledged=bool(body.get("risk_acknowledged")),
+                        )
                     self._json({"item": item}, HTTPStatus.CREATED)
                     return
                 if route in {"/api/privacy/enable", "/api/privacy/disable"}:
                     enabled = route.endswith("enable")
                     sync_service.set_sensitive_sync(enabled)
                     self._json({"sensitive_sync_enabled": enabled})
+                    return
+                if route == "/api/clients/register":
+                    item = repository.register_client(
+                        str(body.get("id", "")),
+                        str(body.get("client_type", "extension")),
+                        str(body.get("client_version", "unknown")),
+                        int(body.get("protocol_version", 1)),
+                    )
+                    self._json({"item": item}, HTTPStatus.CREATED)
                     return
                 route_parts = route.strip("/").split("/")
                 if len(route_parts) == 4 and route_parts[:2] == ["api", "claims"]:
@@ -291,11 +342,39 @@ def _handler_for(vault_path: Path) -> type[BaseHTTPRequestHandler]:
                     if action == "sync":
                         self._json({"item": SyncService(repository).run(route_id, approved)})
                         return
+                    if action == "automation":
+                        self._json(
+                            {
+                                "item": SyncService(repository).configure_automation(
+                                    route_id,
+                                    enabled=bool(body.get("enabled", False)),
+                                    interval_minutes=int(body.get("interval_minutes", 60)),
+                                    risk_acknowledged=bool(
+                                        body.get("risk_acknowledged", False)
+                                    ),
+                                )
+                            }
+                        )
+                        return
+                    if action == "automate":
+                        self._json(
+                            {"item": SyncService(repository).run_automation(route_id)}
+                        )
+                        return
                 if len(route_parts) == 4 and route_parts[:2] == ["api", "receipts"]:
                     receipt_id, action = route_parts[2], route_parts[3]
                     if action == "acknowledge":
                         self._json(
                             {"item": SyncService(repository).acknowledge(receipt_id)}
+                        )
+                        return
+                    if action == "fail":
+                        self._json(
+                            {
+                                "item": SyncService(repository).fail_receipt(
+                                    receipt_id, str(body.get("reason", "adapter_failed"))
+                                )
+                            }
                         )
                         return
                 self._json({"error": "Not found"}, HTTPStatus.NOT_FOUND)
@@ -334,6 +413,7 @@ def _handler_for(vault_path: Path) -> type[BaseHTTPRequestHandler]:
             self.send_header("Cache-Control", "no-store")
             self.send_header("X-Content-Type-Options", "nosniff")
             self.send_header("Content-Security-Policy", "default-src 'self'; script-src 'self'; style-src 'self'")
+            self.send_header("X-ContextVault-Protocol", str(PROTOCOL_VERSION))
             self._cors_headers()
             self.end_headers()
             self.wfile.write(payload)
@@ -356,6 +436,25 @@ def _handler_for(vault_path: Path) -> type[BaseHTTPRequestHandler]:
             if origin:
                 self.send_header("Access-Control-Allow-Origin", origin)
                 self.send_header("Vary", "Origin")
+
+        def _protocol_allowed(self, route: str) -> bool:
+            if not self._extension_origin() or route == "/api/version":
+                return True
+            try:
+                version = int(self.headers.get("X-ContextVault-Protocol", "1"))
+            except ValueError:
+                return False
+            return check_protocol(version).compatible
+
+        def _protocol_error(self) -> None:
+            self._json(
+                {
+                    "error": "Client/server protocol versions are incompatible",
+                    "server_protocol": PROTOCOL_VERSION,
+                    "minimum_protocol": MIN_PROTOCOL_VERSION,
+                },
+                HTTPStatus.UPGRADE_REQUIRED,
+            )
 
     return Handler
 

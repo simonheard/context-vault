@@ -2,7 +2,7 @@
 
 [中文](IMPLEMENTATION_STATUS.md)
 
-## v0.8 local closed loop and user-session adapters
+## v0.9 automation, CLI adapters, and compatibility protocol
 
 The following capabilities now run through the CLI or local management UI:
 
@@ -18,8 +18,11 @@ The following capabilities now run through the CLI or local management UI:
 - produce sync previews, blocked-field explanations, per-run confirmation, incremental diffs, Markdown packages, and sync receipts;
 - include provider attachment references or approved extracted text while keeping attachment binaries out of the database;
 - maintain an append-only event log, multi-device cursors, profile-health metrics, and schema migrations.
-- provide a Chrome MV3 extension for target-account confirmation, policy preview, and composer filling on the user's logged-in ChatGPT, Gemini, and Claude pages;
-- protect loopback extension APIs with a pairing token and track user-confirmed `prepared -> completed` receipts.
+- provide one registry and Chrome MV3 page adapters for 18 global and Chinese web providers;
+- support review-and-fill plus explicitly acknowledged, scheduled full automation with safe button probing and failure retries;
+- install project or global managed profile blocks for nine coding agents, including Codex, Claude Code, and Gemini CLI;
+- generate macOS LaunchAgent, Linux systemd user, and Windows Task Scheduler definitions;
+- negotiate protocol 2 / schema 8 compatibility, register clients, and upgrade CLI managed blocks in place.
 
 ## Capabilities requiring an external platform or deployed infrastructure
 
@@ -28,7 +31,7 @@ The following cannot be completed by a local repository without target-platform 
 - official provider APIs, file upload, verified remote deletion, and post-sync question validation;
 - user-approved incremental capture of new conversations (the current extension writes but does not scrape history);
 - interactive attachment download and transfer between logged-in provider accounts;
-- a multi-device end-to-end encrypted server, key recovery, and device revocation;
+- a multi-device end-to-end encrypted server, key recovery, and device revocation (event cursors and protocol boundaries are implemented locally);
 - optional local LLM and calendar, contacts, repository, or smart-home connectors.
 
 The local implementation supplies route, manifest, receipt, event-cursor, and provider-adapter boundaries for those integrations. Each adapter must still follow the provider's APIs, account policy, and the user's authorization; server-side cookie-based login simulation remains prohibited.
@@ -48,5 +51,9 @@ contextvault privacy enable-sensitive
 contextvault privacy consent <route-id> --categories health,finance --mode ask
 contextvault sync run <route-id> --output gemini-profile.md
 contextvault sync receipts
+contextvault routes automation <route-id> --mode full --interval 60 --acknowledge-data-risk
+contextvault cli install codex --scope project
+contextvault cli sync
+contextvault daemon install
 contextvault ui
 ```

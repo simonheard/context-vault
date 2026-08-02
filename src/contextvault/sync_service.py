@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+from datetime import datetime, timezone
 from dataclasses import dataclass
 from typing import Any, Optional
 from uuid import uuid4
@@ -28,6 +29,9 @@ DEFAULT_POLICY: dict[str, Any] = {
     "require_preview": True,
     "auto_sync": False,
     "attachment_mode": "reference",
+    "automation_mode": "manual",
+    "automation_interval_minutes": 60,
+    "automation_risk_acknowledged_at": None,
 }
 
 
@@ -140,6 +144,74 @@ class SyncService:
         self.repository.append_event(
             "route.disabled", "sync_route", route_id, {"enabled": False}
         )
+
+    def configure_automation(
+        self,
+        route_id: str,
+        *,
+        enabled: bool,
+        interval_minutes: int = 60,
+        risk_acknowledged: bool = False,
+    ) -> dict[str, Any]:
+        route = self._route(route_id)
+        if enabled and not risk_acknowledged:
+            raise ValueError("Full automation requires explicit data-risk acknowledgement")
+        if not 5 <= interval_minutes <= 10080:
+            raise ValueError("Automation interval must be between 5 and 10080 minutes")
+        policy = _validate_policy(json.loads(route["policy_json"]))
+        policy["automation_mode"] = "full" if enabled else "manual"
+        policy["automation_interval_minutes"] = interval_minutes
+        policy["automation_risk_acknowledged_at"] = utc_now() if enabled else None
+        with self.repository.transaction() as connection:
+            connection.execute(
+                "UPDATE sync_routes SET policy_json = ?, updated_at = ? WHERE id = ?",
+                (json.dumps(policy, sort_keys=True), utc_now(), route_id),
+            )
+        self.repository.append_event(
+            "route.automation_changed",
+            "sync_route",
+            route_id,
+            {"enabled": enabled, "interval_minutes": interval_minutes},
+        )
+        return {"route_id": route_id, "automation": policy["automation_mode"], "interval_minutes": interval_minutes}
+
+    def automation_jobs(self) -> list[dict[str, Any]]:
+        jobs: list[dict[str, Any]] = []
+        for route in self.list_routes():
+            if not route["enabled"]:
+                continue
+            policy = _validate_policy(route["policy"])
+            if policy["automation_mode"] != "full" or not policy["automation_risk_acknowledged_at"]:
+                continue
+            if not _interval_due(route["last_synced_at"], int(policy["automation_interval_minutes"])):
+                continue
+            with self.repository.transaction() as connection:
+                prepared = connection.execute(
+                    "SELECT 1 FROM sync_receipts WHERE route_id = ? AND status = 'prepared' LIMIT 1",
+                    (route["id"],),
+                ).fetchone()
+            if prepared:
+                continue
+            preview = self.preview(route["id"], approve_sensitive=False)
+            changes = sum(len(items) for items in preview.diff.values())
+            if not changes or preview.awaiting_confirmation:
+                continue
+            jobs.append(
+                {
+                    "route_id": route["id"],
+                    "target_platform": route["target_platform"],
+                    "target_label": route["target_label"],
+                    "change_count": changes,
+                }
+            )
+        return jobs
+
+    def run_automation(self, route_id: str) -> dict[str, Any]:
+        route = self._route(route_id)
+        policy = _validate_policy(json.loads(route["policy_json"]))
+        if policy["automation_mode"] != "full" or not policy["automation_risk_acknowledged_at"]:
+            raise ValueError("Full automation is not enabled for this route")
+        return self.run(route_id, approve_sensitive=False)
 
     def set_sensitive_sync(self, enabled: bool) -> None:
         with self.repository.transaction() as connection:
@@ -371,6 +443,28 @@ class SyncService:
         )
         return next(item for item in self.list_receipts() if item["id"] == receipt_id)
 
+    def fail_receipt(self, receipt_id: str, reason: str) -> dict[str, Any]:
+        now = utc_now()
+        with self.repository.transaction() as connection:
+            row = connection.execute(
+                "SELECT * FROM sync_receipts WHERE id = ?", (receipt_id,)
+            ).fetchone()
+            if row is None:
+                raise ValueError("Unknown sync receipt")
+            if row["status"] != "prepared":
+                raise ValueError("Only a prepared receipt can be marked failed")
+            connection.execute(
+                "UPDATE sync_receipts SET status = 'failed', completed_at = ? WHERE id = ?",
+                (now, receipt_id),
+            )
+        self.repository.append_event(
+            "sync.failed",
+            "sync_receipt",
+            receipt_id,
+            {"failed_at": now, "reason": reason[:300]},
+        )
+        return next(item for item in self.list_receipts() if item["id"] == receipt_id)
+
     def list_receipts(self) -> list[dict[str, Any]]:
         with self.repository.transaction() as connection:
             rows = connection.execute(
@@ -456,6 +550,12 @@ def _validate_policy(policy: dict[str, Any]) -> dict[str, Any]:
         "transfer",
     }:
         raise ValueError("Invalid attachment mode")
+    if merged["automation_mode"] not in {"manual", "full"}:
+        raise ValueError("Invalid automation mode")
+    interval = int(merged["automation_interval_minutes"])
+    if not 5 <= interval <= 10080:
+        raise ValueError("Invalid automation interval")
+    merged["automation_interval_minutes"] = interval
     return merged
 
 
@@ -488,3 +588,16 @@ def _manifest_item(claim: Claim) -> dict[str, Any]:
         "sensitivity": claim.sensitivity.value,
         "updated_at": claim.updated_at,
     }
+
+
+def _interval_due(last_synced_at: Optional[str], interval_minutes: int) -> bool:
+    if not last_synced_at:
+        return True
+    try:
+        last = datetime.fromisoformat(last_synced_at)
+    except ValueError:
+        return True
+    if last.tzinfo is None:
+        last = last.replace(tzinfo=timezone.utc)
+    elapsed = datetime.now(timezone.utc) - last
+    return elapsed.total_seconds() >= interval_minutes * 60

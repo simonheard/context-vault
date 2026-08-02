@@ -81,7 +81,7 @@ The first release prioritizes:
 
 ## Repository status
 
-This repository now contains a runnable local closed loop and user-session adapters (v0.8.0):
+This repository now contains a runnable local closed loop, user-session adapters, and coding-agent adapters (v0.9.0):
 
 - a zero-dependency Python CLI;
 - a SQLite store and explicit domain model centered on `Entity`, `Claim`, `ProviderAccount`, `ProfileSpace`, and `AttachmentRef`;
@@ -93,7 +93,10 @@ This repository now contains a runnable local closed loop and user-session adapt
 - a working local management GUI and automated tests for the core workflow.
 - official ChatGPT export parsing, pre-storage secret redaction, and deterministic Chinese/English candidate extraction;
 - device scanning, sync policy, preview diffs, profile packages, informed consent, and sync receipts.
-- a user-side Chrome extension that fills approved data into the user's logged-in ChatGPT, Gemini, or Claude page without handling credentials or sending automatically.
+- 18 web AI adapters spanning global and Chinese services, including ChatGPT, Gemini, Claude, DeepSeek, Kimi, Qwen, Doubao, and Tencent Yuanbao;
+- a Chrome extension with review-and-fill mode and explicitly acknowledged scheduled full automation;
+- project or global profile-file adapters for Codex, Claude Code, Gemini CLI, Cursor, Copilot, Cline, Windsurf, Aider, and OpenCode;
+- schema, event, and client protocol negotiation plus in-place upgrades of CLI-managed blocks.
 
 ## Quick start
 
@@ -118,13 +121,16 @@ contextvault devices scan
 contextvault routes preview <route-id>
 contextvault sync run <route-id> --output gemini-profile.md
 contextvault extension token
-python3 -m unittest discover -s tests
+contextvault cli install codex --scope project
+contextvault cli install claude-code --scope project
+contextvault cli sync
+contextvault daemon install
+PYTHONPATH=src python3 -m unittest discover -s tests
 ```
 
-## Later planned commands
+## External infrastructure still required
 
 ```text
-Browser capture of user-approved incremental conversations
 Official provider APIs and attachment-upload adapters
 End-to-end encrypted multi-device sync server
 Optional local LLM and external data connectors
@@ -142,3 +148,7 @@ Optional local LLM and external data connectors
 - [Attachment references and cross-AI handling](docs/ATTACHMENTS.en.md)
 - [Implementation status and external-integration boundaries](docs/IMPLEMENTATION_STATUS.en.md)
 - [User-session browser extension](docs/BROWSER_EXTENSION.en.md)
+- [Provider adapter matrix](docs/PROVIDERS.en.md)
+- [CLI and coding-agent adapters](docs/CLI_ADAPTERS.en.md)
+- [Full automation and safety boundaries](docs/AUTOMATION.en.md)
+- [Cross-version synchronization protocol](docs/VERSIONING.en.md)

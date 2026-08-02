@@ -118,6 +118,21 @@ async function loadSpaces() {
   }));
 }
 
+async function loadProviders() {
+  const { items } = await api("/api/providers");
+  const selector = document.getElementById("account-platform");
+  selector.replaceChildren(...items.map((item) => {
+    const option = document.createElement("option");
+    option.value = item.id;
+    option.textContent = `${item.display_name}${item.region === "china" ? "（国产）" : ""}`;
+    return option;
+  }));
+  const other = document.createElement("option");
+  other.value = "other";
+  other.textContent = "其他";
+  selector.append(other);
+}
+
 async function claimAction(claimId, action) {
   await api(`/api/claims/${claimId}/${action}`, { method: "POST", body: "{}" });
   await Promise.all([loadClaims(), loadDashboard(), loadEvents()]);
@@ -213,7 +228,11 @@ async function loadRoutes() {
     return;
   }
   items.forEach((item) => {
-    const row = listItem(`${item.source_label || "全部来源"} → ${item.target_label}`, item.space_name, item.enabled ? "启用" : "停用");
+    const automatic = item.policy?.automation_mode === "full";
+    const detail = automatic
+      ? `${item.space_name} · 每 ${item.policy.automation_interval_minutes} 分钟全自动`
+      : `${item.space_name} · 半自动`;
+    const row = listItem(`${item.source_label || "全部来源"} → ${item.target_label}`, detail, item.enabled ? "启用" : "停用");
     const actions = row.querySelector(".chip");
     actions.className = "row-actions";
     actions.replaceChildren();
@@ -377,6 +396,6 @@ document.getElementById("copy-extension-token").addEventListener("click", async 
   window.setTimeout(() => { input.type = "password"; }, 5000);
 });
 
-Promise.all([loadDashboard(), loadAccounts(), loadSpaces(), loadClaims(), loadEvents(), loadDevices(), loadRoutes(), loadPrivacy(), loadReceipts()]).catch((error) => {
+Promise.all([loadDashboard(), loadAccounts(), loadSpaces(), loadProviders(), loadClaims(), loadEvents(), loadDevices(), loadRoutes(), loadPrivacy(), loadReceipts()]).catch((error) => {
   document.querySelector("main").dataset.error = error.message;
 });

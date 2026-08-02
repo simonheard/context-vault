@@ -33,7 +33,7 @@ class MigrationTests(unittest.TestCase):
                 columns = {
                     row[1] for row in connection.execute("PRAGMA table_info(sync_receipts)")
                 }
-            self.assertEqual(result.schema_version, 7)
+            self.assertEqual(result.schema_version, 8)
             self.assertIn("route_id", columns)
 
 

@@ -97,6 +97,9 @@ def build_parser() -> argparse.ArgumentParser:
     profile_show.add_argument("--format", choices=["markdown", "json"], default="markdown")
     profile_health = profile_commands.add_parser("health", help="show profile health and review counts")
     profile_health.add_argument("--space", default="personal")
+    profile_export_browser = profile_commands.add_parser("export-browser", help="export a standalone extension backup")
+    profile_export_browser.add_argument("output", type=Path)
+    profile_export_browser.add_argument("--space", default="personal")
 
     events_parser = subparsers.add_parser("events", help="inspect the append-only sync log")
     event_commands = events_parser.add_subparsers(dest="event_command", required=True)
@@ -128,7 +131,8 @@ def build_parser() -> argparse.ArgumentParser:
     )
 
     import_parser = subparsers.add_parser("import", help="import provider data exports")
-    import_parser.add_argument("source", type=Path, help="ChatGPT export ZIP or conversations.json")
+    import_parser.add_argument("source", type=Path, help="ChatGPT export or standalone browser-vault JSON")
+    import_parser.add_argument("--format", choices=["auto", "chatgpt", "browser-vault"], default="auto")
     import_parser.add_argument("--account")
     import_parser.add_argument("--space", default="personal")
     import_parser.add_argument("--no-extract", action="store_true")
@@ -305,13 +309,25 @@ def main(argv: list[str] | None = None) -> int:
             serve(args.vault, args.host, args.port)
             return 0
         if args.command == "import":
-            result = ImportPipeline(VaultRepository(args.vault)).import_chatgpt(
-                args.source,
-                account_id=args.account,
-                space=args.space,
-                extract=not args.no_extract,
-            )
-            print(json.dumps(asdict(result), ensure_ascii=False, indent=2))
+            pipeline = ImportPipeline(VaultRepository(args.vault))
+            standalone = args.format == "browser-vault"
+            if args.format == "auto" and args.source.suffix.lower() == ".json":
+                try:
+                    header = json.loads(args.source.read_text(encoding="utf-8"))
+                    standalone = isinstance(header, dict) and header.get("schema") == 1 and isinstance(header.get("claims"), list)
+                except (OSError, json.JSONDecodeError):
+                    standalone = False
+            if standalone:
+                result = pipeline.import_standalone_vault(args.source, space=args.space)
+                print(json.dumps(result, ensure_ascii=False, indent=2))
+            else:
+                result = pipeline.import_chatgpt(
+                    args.source,
+                    account_id=args.account,
+                    space=args.space,
+                    extract=not args.no_extract,
+                )
+                print(json.dumps(asdict(result), ensure_ascii=False, indent=2))
             return 0
         if args.command == "imports":
             print(json.dumps(VaultRepository(args.vault).list_imports(), ensure_ascii=False, indent=2))
@@ -544,6 +560,26 @@ def main(argv: list[str] | None = None) -> int:
             if args.command == "profile":
                 if args.profile_command == "health":
                     print(json.dumps(service.health(args.space), ensure_ascii=False, indent=2))
+                    return 0
+                if args.profile_command == "export-browser":
+                    status_map = {ClaimStatus.CANDIDATE: "pending", ClaimStatus.CONFIRMED: "confirmed", ClaimStatus.REJECTED: "rejected"}
+                    claims = [
+                        {
+                            "id": claim.id,
+                            "attribute": claim.attribute,
+                            "value": claim.value_text,
+                            "confidence": claim.confidence,
+                            "sensitivity": claim.sensitivity.value,
+                            "status": status_map[claim.status],
+                            "provider": "contextvault-cli",
+                            "createdAt": claim.created_at,
+                        }
+                        for claim in repository.list_claims(space=args.space, limit=1000)
+                        if claim.status in status_map
+                    ]
+                    payload = {"schema": 1, "claims": claims, "captures": {}, "routes": {}, "receipts": []}
+                    args.output.expanduser().resolve().write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+                    print(f"Exported browser vault: {args.output}")
                     return 0
                 if args.format == "json":
                     print(json.dumps(service.current_profile(args.space), ensure_ascii=False, indent=2))

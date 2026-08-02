@@ -2,7 +2,7 @@
 
 [中文](VERSIONING.md)
 
-ContextVault versions the Python product, SQLite schema, client protocol, and each adapter independently. The current set is product `0.10.0`, schema `9`, protocol `3`, and Chrome extension `0.3.0`; the minimum compatible client protocol is `2`.
+ContextVault versions the Python product, SQLite schema, client protocol, and each adapter independently. The current set is product `0.11.0`, schema `9`, protocol `3`, and Chrome extension `0.4.0`; the minimum compatible client protocol is `2`. The standalone extension vault uses schema `1`.
 
 - `/api/version` performs a handshake before routes are read;
 - the extension sends `X-ContextVault-Protocol`, and values outside the server range receive HTTP 426;

@@ -7,14 +7,14 @@
     <link rel="stylesheet" href="popup.css">
   </head>
   <body>
-    <header><span class="mark">CV</span><div><strong>ContextVault</strong><small>用户登录态适配器</small></div></header>
+    <header><span class="mark">CV</span><div><strong>ContextVault</strong><small>可独立运行 · 可选连接本地服务</small></div></header>
     <section class="setup" id="setup">
-      <label>本地服务地址<input id="api-base" value="http://127.0.0.1:8787"></label>
-      <label>配对 Token<input id="pairing-token" type="password" placeholder="运行 contextvault extension token"></label>
-      <button id="save-settings">保存并连接</button>
+      <fieldset><legend>独立插件模式</legend><p class="hint">不安装 CLI；资料保存在当前 Chrome Profile。</p><button id="start-standalone">直接使用插件</button></fieldset>
+      <fieldset><legend>连接高级本地服务（可选）</legend><label>本地服务地址<input id="api-base" value="http://127.0.0.1:8787"></label><label>配对 Token<input id="pairing-token" type="password" placeholder="运行 contextvault extension token"></label><button id="save-settings">连接本地服务</button></fieldset>
     </section>
     <section id="workflow" hidden>
       <div class="status" id="page-status">正在检查当前页面…</div>
+      <div class="actions"><button id="open-vault" class="secondary">管理独立资料库</button><button id="switch-mode" class="secondary">切换运行模式</button></div>
       <fieldset>
         <legend>从当前网页拉取资料</legend>
         <label>来源账号<select id="capture-account"></select></label>
@@ -37,10 +37,11 @@
         <label class="check"><input id="automation-risk" type="checkbox"><span>我理解扩展会定期开启或复用目标页面并自动点击发送；可能把资料发到错误登录账号，且第三方可能保留数据。我已检查 route 白名单和敏感策略。</span></label>
         <div class="actions"><button id="enable-automation">开启全自动</button><button id="disable-automation" class="secondary">关闭全自动</button></div>
       </fieldset>
-      <p class="warning">扩展不会读取或上传 Cookie。半自动模式不点击发送；只有你明确开启全自动模式后才会定期打开页面并点击明确识别的发送按钮。</p>
+      <p class="warning">扩展不会读取或上传 Cookie。独立模式资料只在 Chrome 扩展存储中；本地服务模式使用 SQLite。半自动模式不点击发送，只有明确开启全自动后才会定期打开页面。</p>
     </section>
     <p id="message" role="status"></p>
     <script src="providers.js"></script>
+    <script src="standalone.js"></script>
     <script src="popup.js"></script>
   </body>
 </html>

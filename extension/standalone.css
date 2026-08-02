@@ -1,0 +1,18 @@
+:root { color-scheme: light; font-family: Inter, system-ui, sans-serif; color: #18332b; background: #f4f1e8; }
+body { margin: 0; }
+main { max-width: 980px; margin: 0 auto; padding: 32px 20px 80px; }
+header, .toolbar, form, .claim, .claim-actions { display: flex; gap: 12px; align-items: center; }
+header { justify-content: space-between; }
+header p { margin: 0; color: #517368; font-size: 12px; letter-spacing: .12em; }
+h1 { margin: 4px 0 20px; } h2 { margin-top: 28px; }
+.notice { padding: 14px 16px; border: 1px solid #d0a35c; background: #fff9e8; border-radius: 10px; line-height: 1.55; }
+.toolbar { flex-wrap: wrap; margin: 20px 0; }
+button, .file { border: 0; border-radius: 8px; padding: 9px 13px; background: #155438; color: white; cursor: pointer; font: inherit; }
+.secondary { background: #6b5b4b; } .file input { display: none; }
+form { flex-wrap: wrap; } input, select { padding: 9px 10px; border: 1px solid #b9c4bc; border-radius: 7px; font: inherit; background: white; }
+form input[name="value"] { flex: 1; min-width: 260px; }
+.claim { align-items: flex-start; justify-content: space-between; padding: 13px 0; border-bottom: 1px solid #d8d5cb; }
+.claim p { margin: 3px 0; overflow-wrap: anywhere; } .meta { color: #61736c; font-size: 12px; }
+.pending { color: #9a5a11; } .confirmed { color: #155438; } .rejected { color: #8b4141; text-decoration: line-through; }
+#message { position: fixed; bottom: 12px; right: 20px; background: #18332b; color: white; padding: 10px 14px; border-radius: 8px; }
+@media (max-width: 650px) { .claim { display: block; } .claim-actions { margin-top: 8px; } }

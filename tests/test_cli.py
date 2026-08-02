@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import contextlib
 import io
+import json
 import sqlite3
 import tempfile
 import unittest
@@ -106,6 +107,20 @@ class CliTests(unittest.TestCase):
             self.assertIn("Added candidate:", value)
             self.assertIn('"attribute": "identity.location"', value)
             self.assertIn('"event_type": "claim.created"', value)
+
+    def test_cli_exports_a_standalone_extension_backup(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            vault_path = root / "vault.sqlite"
+            output_path = root / "browser.json"
+            with contextlib.redirect_stdout(io.StringIO()):
+                self.assertEqual(main(["--vault", str(vault_path), "claims", "add", "preference.editor", "Vim"]), 0)
+                self.assertEqual(main(["--vault", str(vault_path), "claims", "confirm-all"]), 0)
+                self.assertEqual(main(["--vault", str(vault_path), "profile", "export-browser", str(output_path)]), 0)
+            payload = json.loads(output_path.read_text(encoding="utf-8"))
+            self.assertEqual(payload["schema"], 1)
+            self.assertEqual(payload["claims"][0]["status"], "confirmed")
+            self.assertEqual(payload["claims"][0]["value"], "Vim")
 
 
 if __name__ == "__main__":

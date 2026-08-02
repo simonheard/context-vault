@@ -2,8 +2,8 @@
   "manifest_version": 3,
   "minimum_chrome_version": "120",
   "name": "ContextVault User Adapter",
-  "version": "0.3.0",
-  "description": "Pull approved conversation context and push profile updates through AI sites where you are already logged in.",
+  "version": "0.4.0",
+  "description": "Standalone or service-backed profile capture and synchronization across AI sites where you are already logged in.",
   "permissions": ["activeTab", "storage", "clipboardWrite", "alarms", "tabs", "notifications"],
   "host_permissions": [
     "http://127.0.0.1/*",
@@ -17,6 +17,7 @@
     "https://xinghuo.xfyun.cn/*", "https://www.tiangong.cn/*", "https://tiangong.cn/*", "https://hailuoai.com/*", "https://www.hailuoai.com/*"
   ],
   "background": { "service_worker": "background.js" },
+  "options_page": "standalone.html",
   "action": {
     "default_title": "ContextVault",
     "default_popup": "popup.html"

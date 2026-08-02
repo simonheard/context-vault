@@ -2,7 +2,7 @@
 
 [English](IMPLEMENTATION_STATUS.en.md)
 
-## v0.10 双向自动化、总结引擎与安全恢复
+## v0.11 CLI/扩展独立运行与双向自动化
 
 以下能力已经可以通过 CLI 或本地管理后台运行：
 
@@ -26,6 +26,8 @@
 - 当前对话拉取、空白页资料探测、低置信度候选、专用推送对话绑定和三次失败熔断；
 - `dispatching` / `sent_unconfirmed` 回执、页面标记与重启恢复，避免不确定发送被重复执行；
 - 确定性、Ollama、LM Studio、OpenAI-compatible、Codex CLI 和 Claude Code 总结引擎。
+- 不依赖 Python 的扩展独立资料库、候选审阅、JSON 备份、捕获和推送调度器；
+- 不包含扩展目录的独立 CLI wheel，以及扩展备份到 SQLite 的显式迁移命令。
 
 ## 需要外部平台或部署基础设施的能力
 
@@ -44,9 +46,11 @@
 
 ```bash
 contextvault import chatgpt-export.zip --account <account-id>
+contextvault import contextvault-browser.json --format browser-vault
 contextvault claims list
 contextvault claims confirm-all
 contextvault profile health
+contextvault profile export-browser contextvault-browser.json
 contextvault summary --type work
 contextvault devices scan
 contextvault routes add --from <source> --space personal --to <target>

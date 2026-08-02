@@ -77,7 +77,7 @@ ChatGPT 历史对话       设备扫描       手动填写       其他数据源
 
 ## 当前仓库状态
 
-当前已经具备可运行的本地完整闭环、双向用户登录态自动化和 CLI 适配器（v0.10.0），包含：
+当前已经具备可运行的本地完整闭环、双向用户登录态自动化和 CLI 适配器（v0.11.0），包含：
 
 - 零依赖 Python CLI；
 - SQLite 资料库与显式领域模型，核心对象为 `Entity`、`Claim`、`ProviderAccount`、`ProfileSpace` 和 `AttachmentRef`；
@@ -99,7 +99,10 @@ ChatGPT 历史对话       设备扫描       手动填写       其他数据源
 
 ## 快速开始
 
-需要 Python 3.11+。
+CLI 与浏览器扩展可以完全独立使用。只需要网页同步的用户直接安装扩展并选择“直接使用插件”；只需要
+本地资料、设备或 Codex/Claude Code 支持的用户只安装 CLI wheel。详见[独立运行模式](docs/RUN_MODES.md)。
+
+CLI 需要 Python 3.11+：
 
 ```bash
 python3 -m venv .venv
@@ -156,3 +159,4 @@ PYTHONPATH=src python3 -m unittest discover -s tests
 - [跨版本同步协议](docs/VERSIONING.md)
 - [网页双向捕获](docs/CAPTURE.md)
 - [自动总结引擎](docs/MODEL_ENGINES.md)
+- [CLI 与扩展独立运行](docs/RUN_MODES.md)

@@ -1,18 +1,19 @@
-importScripts("providers.js");
+importScripts("providers.js", "standalone.js");
 
 const PROTOCOL_VERSION = 3;
 const LOCK_KEY = "automationLock";
 const KNOWLEDGE_PROBE_PROMPT = `请根据你当前账号中可用的记忆和个性化信息，总结你已经知道的关于我的事实。不要猜测，不要输出密码、令牌、身份证号或精确地址。为了便于我导出，请只使用以下第一人称句式，每行一条；不知道的类别不要写：\nMy name is ...\nI live in ...\nI work at ...\nI study at ...\nI speak ...\nI prefer ...\nI use ...`;
 
 async function settings() {
-  const saved = await chrome.storage.local.get(["base", "token"]);
+  const saved = await chrome.storage.local.get(["mode", "base", "token"]);
+  if (saved.mode === "standalone") return { mode: "standalone" };
   if (!saved.base || !saved.token) return null;
-  return { base: saved.base.replace(/\/$/, ""), token: saved.token };
+  return { mode: "service", base: saved.base.replace(/\/$/, ""), token: saved.token };
 }
 
 async function api(path, options = {}) {
   const configured = await settings();
-  if (!configured) throw new Error("ContextVault extension is not paired");
+  if (!configured || configured.mode !== "service") throw new Error("ContextVault local service is not paired");
   const response = await fetch(`${configured.base}${path}`, {
     ...options,
     headers: {
@@ -25,6 +26,107 @@ async function api(path, options = {}) {
   const body = await response.json();
   if (!response.ok) throw new Error(body.error || "ContextVault automation request failed");
   return body;
+}
+
+async function updateStandaloneRun(kind, provider, updates = {}) {
+  const vault = await contextVaultStandaloneLoad();
+  const collection = kind === "capture" ? vault.captures : vault.routes;
+  if (!collection[provider]) return;
+  Object.assign(collection[provider], { lastRunAt: new Date().toISOString(), consecutiveFailures: 0, pausedReason: null, ...updates });
+  await contextVaultStandaloneSave(vault);
+}
+
+async function standaloneCaptureJob(job) {
+  const tab = await providerTab(job.provider, job.conversationUrl, false);
+  let capture = await chrome.tabs.sendMessage(tab.id, { type: "contextvault:capture" });
+  let knowledgeProbe = false;
+  if (capture?.ok && !capture.messages?.length && isBlankConversationUrl(job.provider, capture.conversation_url)) {
+    const sent = await chrome.tabs.sendMessage(tab.id, { type: "contextvault:autoSend", content: KNOWLEDGE_PROBE_PROMPT });
+    if (!sent?.sent) throw new Error(sent?.error || "无法创建资料探测对话");
+    knowledgeProbe = true;
+    capture = await waitForKnowledgeProbe(tab.id);
+  }
+  if (!capture?.ok || !capture.messages?.length) throw new Error(capture?.error || "当前对话没有可捕获消息");
+  const result = await contextVaultStandaloneIngest(capture, knowledgeProbe);
+  await updateStandaloneRun("capture", job.provider, { conversationUrl: capture.conversation_url });
+  if (result.candidates) await notify("ContextVault 独立拉取完成", `新增 ${result.candidates} 条待审阅候选`);
+}
+
+async function recoverStandalonePending(vault, provider, route) {
+  if (!route.pendingReceipt?.id) return false;
+  const tabs = await chrome.tabs.query({});
+  for (const tab of tabs) {
+    try {
+      const found = await chrome.tabs.sendMessage(tab.id, { type: "contextvault:hasMarker", marker: route.pendingReceipt.id });
+      if (!found?.found) continue;
+      route.lastSyncedHash = route.pendingReceipt.contentHash;
+      route.lastRunAt = new Date().toISOString();
+      route.conversationUrl = tab.url;
+      vault.receipts.push({ ...route.pendingReceipt, status: "completed", recoveredAt: new Date().toISOString() });
+      route.pendingReceipt = null;
+      await contextVaultStandaloneSave(vault);
+      return true;
+    } catch { /* unrelated tab */ }
+  }
+  route.pausedReason = "ambiguous_send_requires_user_reenable";
+  await contextVaultStandaloneSave(vault);
+  await notify("ContextVault 独立同步需要确认", `${provider} 的发送结果未知；已暂停且不会自动重试。`);
+  return false;
+}
+
+async function standalonePushJob(provider, route) {
+  let vault = await contextVaultStandaloneLoad();
+  let currentRoute = vault.routes[provider];
+  if (!currentRoute) return;
+  if (currentRoute.pendingReceipt) {
+    await recoverStandalonePending(vault, provider, currentRoute);
+    return;
+  }
+  const profile = contextVaultStandaloneProfile(vault);
+  if (!profile.claims.length) return;
+  const contentHash = await contextVaultStandaloneDigest(profile.content);
+  if (currentRoute.lastSyncedHash === contentHash) {
+    await updateStandaloneRun("route", provider);
+    return;
+  }
+  const tab = await providerTab(provider, currentRoute.conversationUrl, !currentRoute.conversationUrl);
+  const probe = await chrome.tabs.sendMessage(tab.id, { type: "contextvault:probe" });
+  if (!probe?.ready) throw new Error("目标页面未登录或没有可用输入框");
+  const receipt = { id: crypto.randomUUID(), provider, contentHash, status: "dispatching", createdAt: new Date().toISOString() };
+  currentRoute.pendingReceipt = receipt;
+  await contextVaultStandaloneSave(vault);
+  const response = await chrome.tabs.sendMessage(tab.id, { type: "contextvault:autoSend", content: `${profile.content}\n[ContextVault standalone · ${receipt.id}]` });
+  if (!response?.sent) {
+    vault = await contextVaultStandaloneLoad();
+    vault.routes[provider].pendingReceipt = null;
+    await contextVaultStandaloneSave(vault);
+    throw new Error(response?.error || "自动发送按钮不可用");
+  }
+  const conversationUrl = await waitForConversationUrl(tab.id, provider);
+  vault = await contextVaultStandaloneLoad();
+  currentRoute = vault.routes[provider];
+  currentRoute.pendingReceipt = null;
+  currentRoute.lastSyncedHash = contentHash;
+  currentRoute.lastRunAt = new Date().toISOString();
+  currentRoute.conversationUrl = conversationUrl || tab.url;
+  currentRoute.consecutiveFailures = 0;
+  currentRoute.pausedReason = null;
+  vault.receipts.push({ ...receipt, status: "completed", completedAt: new Date().toISOString() });
+  await contextVaultStandaloneSave(vault);
+  await notify("ContextVault 独立同步完成", `${CONTEXTVAULT_PROVIDERS[provider].name}：${profile.claims.length} 条资料`);
+}
+
+async function standaloneAutomationTick() {
+  const vault = await contextVaultStandaloneLoad();
+  for (const job of Object.values(vault.captures).filter((item) => contextVaultStandaloneDue(item))) {
+    try { await standaloneCaptureJob(job); }
+    catch (error) { await contextVaultStandaloneFailure("capture", job.provider, error.message); await notify("ContextVault 独立拉取失败", error.message); }
+  }
+  const refreshed = await contextVaultStandaloneLoad();
+  for (const route of Object.values(refreshed.routes).filter((item) => contextVaultStandaloneDue(item) || (item.pendingReceipt && !item.pausedReason))) {
+    try { await standalonePushJob(route.provider, route); }
+    catch (error) { await contextVaultStandaloneFailure("route", route.provider, error.message); await notify("ContextVault 独立推送失败", error.message); }
+  }
 }
 
 async function acquireLock() {
@@ -207,8 +309,13 @@ async function executePushJob(job) {
 }
 
 async function automationTick() {
-  if (!await settings() || !await acquireLock()) return;
+  const configured = await settings();
+  if (!configured || !await acquireLock()) return;
   try {
+    if (configured.mode === "standalone") {
+      await standaloneAutomationTick();
+      return;
+    }
     await recoverPendingDispatch();
     const captureResult = await api("/api/capture/jobs");
     for (const job of captureResult.items) {
@@ -242,5 +349,13 @@ chrome.runtime.onInstalled.addListener(ensureAlarm);
 chrome.runtime.onStartup.addListener(ensureAlarm);
 chrome.alarms.onAlarm.addListener((alarm) => {
   if (alarm.name === "contextvault-automation") automationTick();
+});
+chrome.runtime.onMessage.addListener((request, _sender, sendResponse) => {
+  if (request.type !== "contextvault:standaloneCaptureNow") return;
+  settings().then((configured) => {
+    if (configured?.mode !== "standalone") throw new Error("扩展当前不在独立模式");
+    return standaloneCaptureJob({ provider: request.provider, conversationUrl: request.conversationUrl });
+  }).then(() => sendResponse({ ok: true })).catch((error) => sendResponse({ ok: false, error: error.message }));
+  return true;
 });
 ensureAlarm();

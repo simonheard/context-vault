@@ -21,6 +21,8 @@ jobs:
           node-version: "22"
       - name: Test Python
         run: PYTHONPATH=src python -m unittest discover -s tests -v
+      - name: Test standalone extension core
+        run: node tests/test_standalone.js
       - name: Check extension JavaScript
         run: |
           node --check extension/content.js
@@ -32,8 +34,18 @@ jobs:
         run: python -m json.tool extension/manifest.json >/dev/null
       - name: Package extension
         run: python scripts/package_extension.py
+      - name: Package independent CLI wheel
+        run: |
+          python -m pip install build
+          python -m build --wheel --outdir dist/cli
+          python scripts/verify_cli_wheel.py dist/cli/context_vault-*.whl
       - uses: actions/upload-artifact@v7
         with:
           name: contextvault-extension
           path: dist/contextvault-extension.zip
+          if-no-files-found: error
+      - uses: actions/upload-artifact@v7
+        with:
+          name: contextvault-cli
+          path: dist/cli/*.whl
           if-no-files-found: error

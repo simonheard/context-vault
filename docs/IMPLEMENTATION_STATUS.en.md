@@ -2,7 +2,7 @@
 
 [中文](IMPLEMENTATION_STATUS.md)
 
-## v0.10 bidirectional automation, summary engines, and safe recovery
+## v0.11 independent CLI/extension operation and bidirectional automation
 
 The following capabilities now run through the CLI or local management UI:
 
@@ -26,6 +26,8 @@ The following capabilities now run through the CLI or local management UI:
 - pull current chats, create blank-page knowledge probes, retain low-confidence candidates, bind dedicated push chats, and trip a three-failure circuit breaker;
 - preserve `dispatching` and `sent_unconfirmed` states plus page markers across restarts to prevent duplicate sends;
 - provide deterministic, Ollama, LM Studio, OpenAI-compatible, Codex CLI, and Claude Code summary engines.
+- provide a Python-free standalone extension vault, candidate review, JSON backup, capture, and push scheduler;
+- publish an independent CLI wheel without extension files and explicitly migrate extension backups into SQLite.
 
 ## Capabilities requiring an external platform or deployed infrastructure
 
@@ -43,9 +45,11 @@ The local implementation supplies route, manifest, receipt, event-cursor, and pr
 
 ```bash
 contextvault import chatgpt-export.zip --account <account-id>
+contextvault import contextvault-browser.json --format browser-vault
 contextvault claims list
 contextvault claims confirm-all
 contextvault profile health
+contextvault profile export-browser contextvault-browser.json
 contextvault summary --type work
 contextvault devices scan
 contextvault routes add --from <source> --space personal --to <target>

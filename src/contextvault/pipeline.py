@@ -6,11 +6,12 @@ import json
 from pathlib import Path
 from typing import Optional
 
-from contextvault.domain import ClaimStatus, SourceType
+from contextvault.domain import ClaimStatus, Sensitivity, SourceType
 from contextvault.extractors import extract_profile_candidates
 from contextvault.importers import ImportBundle, ImportedMessage, load_chatgpt_export
 from contextvault.repository import VaultRepository
 from contextvault.services import ProfileService
+from contextvault.security import reject_secrets
 
 
 _SINGLE_VALUE_ATTRIBUTES = {
@@ -108,6 +109,57 @@ class ImportPipeline:
             extract_role="assistant" if knowledge_probe else "user",
             confidence_scale=0.65 if knowledge_probe else 1.0,
         )
+
+    def import_standalone_vault(self, path: Path, *, space: str = "personal") -> dict[str, int]:
+        """Import an explicit JSON backup from the independent browser extension."""
+        if path.stat().st_size > 5_000_000:
+            raise ValueError("Standalone browser backup exceeds the five-megabyte limit")
+        payload = json.loads(path.read_text(encoding="utf-8"))
+        if not isinstance(payload, dict) or payload.get("schema") != 1:
+            raise ValueError("Unsupported standalone browser backup schema")
+        items = payload.get("claims")
+        if not isinstance(items, list) or len(items) > 10000:
+            raise ValueError("Standalone browser backup has an invalid claim list")
+        for item in items:
+            if isinstance(item, dict) and item.get("status") != "rejected":
+                value = str(item.get("value", "")).strip()
+                if value:
+                    reject_secrets(value)
+        service = ProfileService(self.repository)
+        existing = {(item.attribute, item.value_text) for item in self.repository.list_claims(space=space, limit=1000)}
+        added = confirmed = skipped = 0
+        backup_hash = hashlib.sha256(path.read_bytes()).hexdigest()
+        for item in items:
+            if not isinstance(item, dict) or item.get("status") == "rejected":
+                skipped += 1
+                continue
+            attribute = str(item.get("attribute", "")).strip()
+            value = str(item.get("value", "")).strip()
+            if not attribute or not value or (attribute, value) in existing:
+                skipped += 1
+                continue
+            sensitivity_value = str(item.get("sensitivity", "personal"))
+            sensitivity = Sensitivity(sensitivity_value) if sensitivity_value in {entry.value for entry in Sensitivity if entry is not Sensitivity.SECRET} else Sensitivity.PERSONAL
+            claim = service.add_candidate(
+                attribute=attribute,
+                value=value,
+                space=space,
+                confidence=max(0.0, min(1.0, float(item.get("confidence", 1.0)))),
+                sensitivity=sensitivity,
+                source_type=SourceType.IMPORT,
+                platform="browser_extension",
+                evidence_hash=backup_hash,
+            )
+            added += 1
+            existing.add((attribute, value))
+            if item.get("status") == "confirmed":
+                service.confirm(claim.id)
+                confirmed += 1
+        self.repository.append_event(
+            "browser_backup.imported", "standalone_backup", backup_hash[:24],
+            {"added": added, "confirmed": confirmed, "skipped": skipped},
+        )
+        return {"added": added, "confirmed": confirmed, "skipped": skipped}
 
     def _extract_import(
         self,

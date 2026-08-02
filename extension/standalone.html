@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>ContextVault 独立资料库</title>
+    <link rel="stylesheet" href="standalone.css">
+  </head>
+  <body>
+    <main>
+      <header><div><p>STANDALONE BROWSER VAULT</p><h1>扩展独立资料库</h1></div><span id="stats">正在读取…</span></header>
+      <section class="notice">资料只保存在当前 Chrome Profile 的扩展存储中，不需要 ContextVault CLI。卸载扩展或清除扩展数据前请先导出备份。浏览器存储不是端到端加密保险库，建议启用操作系统磁盘加密。</section>
+      <section class="toolbar">
+        <button id="confirm-all">确认全部候选</button>
+        <button id="export">导出 JSON</button>
+        <label class="file">导入 JSON<input id="import" type="file" accept="application/json"></label>
+        <button id="clear-rejected" class="secondary">清理已拒绝项</button>
+      </section>
+      <section>
+        <h2>添加资料</h2>
+        <form id="add-form"><input name="attribute" placeholder="属性，例如 preference.editor" required><input name="value" placeholder="内容" required><select name="sensitivity"><option value="personal">个人</option><option value="private">私密</option><option value="sensitive">敏感</option></select><button>添加并确认</button></form>
+      </section>
+      <section><h2>候选与已确认资料</h2><div id="claims"></div></section>
+      <p id="message" role="status"></p>
+    </main>
+    <script src="providers.js"></script>
+    <script src="standalone.js"></script>
+    <script src="standalone-page.js"></script>
+  </body>
+</html>

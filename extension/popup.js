@@ -1,5 +1,5 @@
 const PROTOCOL_VERSION = 3;
-const state = { base: "", token: "", tab: null, provider: null, routes: [], accounts: [], preview: null, receiptId: null, clientId: null };
+const state = { mode: null, base: "", token: "", tab: null, provider: null, routes: [], accounts: [], preview: null, receiptId: null, clientId: null };
 const $ = (id) => document.getElementById(id);
 
 async function api(path, options = {}) {
@@ -27,11 +27,12 @@ function selectedRoute() {
 }
 
 async function connect() {
+  state.mode = "service";
   state.base = $("api-base").value.trim().replace(/\/$/, "");
   state.token = $("pairing-token").value.trim();
   if (!/^http:\/\/(127\.0\.0\.1|localhost):\d+$/.test(state.base)) throw new Error("只允许连接本机 HTTP 服务");
   if (!state.token) throw new Error("请输入配对 Token");
-  await chrome.storage.local.set({ base: state.base, token: state.token });
+  await chrome.storage.local.set({ mode: "service", base: state.base, token: state.token });
   const version = await api("/api/version");
   if (PROTOCOL_VERSION < version.minimum_protocol_version || PROTOCOL_VERSION > version.protocol_version) {
     throw new Error(`扩展协议 ${PROTOCOL_VERSION} 与本地服务协议 ${version.protocol_version} 不兼容，请升级较旧的一端。`);
@@ -102,6 +103,29 @@ async function connect() {
   message("本地服务已连接");
 }
 
+async function startStandalone() {
+  state.mode = "standalone";
+  await chrome.storage.local.set({ mode: "standalone" });
+  const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+  state.tab = tab;
+  state.provider = contextVaultProviderForHostname(new URL(tab.url).hostname);
+  if (!state.provider) throw new Error("请在受支持的 AI 对话页面打开扩展");
+  const probe = await chrome.tabs.sendMessage(tab.id, { type: "contextvault:probe" });
+  $("page-status").textContent = `${CONTEXTVAULT_PROVIDERS[state.provider].name} · 独立插件模式 · ${probe.maturity || "experimental"}`;
+  state.routes = [{ id: `standalone:${state.provider}`, target_platform: state.provider, target_label: CONTEXTVAULT_PROVIDERS[state.provider].name, space_name: "browser", enabled: 1 }];
+  state.accounts = [{ id: `standalone:${state.provider}`, platform: state.provider, account_label: `${CONTEXTVAULT_PROVIDERS[state.provider].name}（当前 Chrome Profile）`, status: "active" }];
+  const routeSelect = $("route-select");
+  routeSelect.replaceChildren();
+  const routeOption = document.createElement("option"); routeOption.value = state.routes[0].id; routeOption.textContent = `浏览器资料库 → ${state.routes[0].target_label}`; routeSelect.append(routeOption);
+  const captureSelect = $("capture-account");
+  captureSelect.replaceChildren();
+  const accountOption = document.createElement("option"); accountOption.value = state.accounts[0].id; accountOption.textContent = state.accounts[0].account_label; captureSelect.append(accountOption);
+  $("preview").disabled = false; $("capture-now").disabled = false; $("enable-capture").disabled = false;
+  updateAccountLabel();
+  $("setup").hidden = true; $("workflow").hidden = false;
+  message("独立插件资料库已启用；不需要 CLI 或本地服务");
+}
+
 function updateAccountLabel() {
   const route = selectedRoute();
   $("account-confirm-label").textContent = route
@@ -114,6 +138,17 @@ function updateAccountLabel() {
 async function preview() {
   const route = selectedRoute();
   if (!route) throw new Error("请选择同步路线");
+  if (state.mode === "standalone") {
+    const vault = await contextVaultStandaloneLoad();
+    const profile = contextVaultStandaloneProfile(vault, $("sensitive-confirm").checked);
+    state.preview = { content: profile.content, included: profile.claims, attachments: [], blocked: [], awaiting_confirmation: [] };
+    $("preview-content").value = profile.content;
+    $("policy-result").textContent = `包含 ${profile.claims.length} 条已确认资料；待审阅候选不会发送。`;
+    $("copy").disabled = false;
+    $("inject").disabled = !$("account-confirm").checked || !profile.claims.length;
+    message(profile.claims.length ? "独立资料预览已生成" : "资料库还没有已确认资料，请先拉取并在管理页确认", !profile.claims.length);
+    return;
+  }
   const approved = $("sensitive-confirm").checked;
   const { item } = await api(`/api/routes/${route.id}/preview`, {
     method: "POST",
@@ -130,6 +165,17 @@ async function preview() {
 async function prepareAndInject() {
   if (!state.preview || !$("account-confirm").checked) throw new Error("请先预览并确认目标账号");
   const route = selectedRoute();
+  if (state.mode === "standalone") {
+    const response = await chrome.tabs.sendMessage(state.tab.id, { type: "contextvault:inject", content: state.preview.content });
+    if (!response?.ok) throw new Error(response?.error || "页面填入失败");
+    state.receiptId = crypto.randomUUID();
+    const vault = await contextVaultStandaloneLoad();
+    vault.receipts.push({ id: state.receiptId, provider: state.provider, status: "prepared", contentHash: await contextVaultStandaloneDigest(state.preview.content), createdAt: new Date().toISOString() });
+    await contextVaultStandaloneSave(vault);
+    $("acknowledge").disabled = false;
+    message("内容已填入，请检查并自行发送");
+    return;
+  }
   const { item } = await api(`/api/routes/${route.id}/sync`, {
     method: "POST",
     body: JSON.stringify({ approve_sensitive: $("sensitive-confirm").checked }),
@@ -146,6 +192,13 @@ async function prepareAndInject() {
 
 async function acknowledge() {
   if (!state.receiptId) throw new Error("没有待确认的同步回执");
+  if (state.mode === "standalone") {
+    const vault = await contextVaultStandaloneLoad();
+    const receipt = vault.receipts.find((item) => item.id === state.receiptId);
+    if (receipt) { receipt.status = "completed"; receipt.completedAt = new Date().toISOString(); }
+    await contextVaultStandaloneSave(vault);
+    $("acknowledge").disabled = true; message("独立模式回执已记录"); return;
+  }
   await api(`/api/receipts/${state.receiptId}/acknowledge`, { method: "POST", body: "{}" });
   $("acknowledge").disabled = true;
   message("已记录为完成。ContextVault 现在会把该版本用于后续 diff。");
@@ -157,6 +210,10 @@ async function configureAutomation(enabled) {
   const risk = $("automation-risk").checked;
   if (enabled && !risk) throw new Error("开启全自动前必须阅读并勾选数据安全风险提示");
   const interval = Number($("automation-interval").value);
+  if (state.mode === "standalone") {
+    const item = await contextVaultStandaloneConfigure("route", state.provider, { enabled, intervalMinutes: interval, conversationUrl: state.tab.url });
+    message(enabled ? `独立全自动已开启，每 ${item.intervalMinutes} 分钟检查资料变化` : "独立全自动已关闭"); return;
+  }
   const { item } = await api(`/api/routes/${route.id}/automation`, {
     method: "POST",
     body: JSON.stringify({ enabled, interval_minutes: interval, risk_acknowledged: risk }),
@@ -167,6 +224,14 @@ async function configureAutomation(enabled) {
 async function captureNow() {
   const accountId = $("capture-account").value;
   if (!accountId) throw new Error("请选择当前网页对应的来源账号");
+  if (state.mode === "standalone") {
+    message("正在后台拉取；空白新对话会自动发起资料探测，请稍候…");
+    const result = await chrome.runtime.sendMessage({ type: "contextvault:standaloneCaptureNow", provider: state.provider, conversationUrl: state.tab.url });
+    if (!result?.ok) throw new Error(result?.error || "独立拉取失败");
+    const vault = await contextVaultStandaloneLoad();
+    const pending = vault.claims.filter((item) => item.status === "pending").length;
+    message(`拉取完成，当前有 ${pending} 条候选待审阅。`); return;
+  }
   const capture = await chrome.tabs.sendMessage(state.tab.id, { type: "contextvault:capture" });
   if (!capture?.ok || !capture.messages?.length) throw new Error(capture?.error || "当前页面没有可拉取的对话消息");
   const { item } = await api("/api/captures/ingest", {
@@ -181,6 +246,10 @@ async function configureCapture(enabled) {
   if (!accountId) throw new Error("请选择来源账号");
   const risk = $("capture-risk").checked;
   if (enabled && !risk) throw new Error("开启自动拉取前必须阅读并确认隐私风险");
+  if (state.mode === "standalone") {
+    const item = await contextVaultStandaloneConfigure("capture", state.provider, { enabled, intervalMinutes: Number($("capture-interval").value), conversationUrl: state.tab.url });
+    message(enabled ? `独立自动拉取已开启，每 ${item.intervalMinutes} 分钟检查一次` : "独立自动拉取已关闭"); return;
+  }
   const { item } = await api(`/api/accounts/${accountId}/capture`, {
     method: "POST",
     body: JSON.stringify({ enabled, interval_minutes: Number($("capture-interval").value), risk_acknowledged: risk, conversation_url: state.tab.url }),
@@ -199,6 +268,9 @@ async function run(action) {
 }
 
 $("save-settings").addEventListener("click", () => run(connect));
+$("start-standalone").addEventListener("click", () => run(startStandalone));
+$("open-vault").addEventListener("click", () => chrome.runtime.openOptionsPage());
+$("switch-mode").addEventListener("click", async () => { await chrome.storage.local.remove(["mode"]); $("workflow").hidden = true; $("setup").hidden = false; message("请选择运行模式"); });
 $("route-select").addEventListener("change", updateAccountLabel);
 $("account-confirm").addEventListener("change", () => {
   $("inject").disabled = !state.preview || !$("account-confirm").checked || state.preview.awaiting_confirmation.length > 0;
@@ -218,8 +290,9 @@ $("copy").addEventListener("click", () => run(async () => {
   message("预览已复制到剪贴板");
 }));
 
-chrome.storage.local.get(["base", "token"]).then((saved) => {
+chrome.storage.local.get(["mode", "base", "token"]).then((saved) => {
   if (saved.base) $("api-base").value = saved.base;
   if (saved.token) $("pairing-token").value = saved.token;
-  if (saved.base && saved.token) run(connect);
+  if (saved.mode === "standalone") run(startStandalone);
+  else if (saved.mode === "service" && saved.base && saved.token) run(connect);
 });

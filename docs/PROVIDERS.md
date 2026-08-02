@@ -4,7 +4,7 @@
 
 ## 当前注册表
 
-浏览器扩展 v0.3 注册了以下平台：
+浏览器扩展 v0.4 注册了以下平台：
 
 - 国际：ChatGPT、Gemini、Claude、Perplexity、Microsoft Copilot、Grok、Mistral Le Chat、Poe；
 - 国产：DeepSeek、Kimi、通义千问/Qwen、豆包、腾讯元宝、智谱清言、文心一言/文小言、讯飞星火、天工 AI、海螺 AI。

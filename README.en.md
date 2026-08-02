@@ -81,7 +81,7 @@ The first release prioritizes:
 
 ## Repository status
 
-This repository now contains a runnable local closed loop, bidirectional user-session automation, and coding-agent adapters (v0.10.0):
+This repository now contains a runnable local closed loop, bidirectional user-session automation, and coding-agent adapters (v0.11.0):
 
 - a zero-dependency Python CLI;
 - a SQLite store and explicit domain model centered on `Entity`, `Claim`, `ProviderAccount`, `ProfileSpace`, and `AttachmentRef`;
@@ -103,7 +103,9 @@ This repository now contains a runnable local closed loop, bidirectional user-se
 
 ## Quick start
 
-Requires Python 3.11+.
+The CLI and browser extension can run completely independently. Web-sync-only users install the extension and choose standalone mode; users who need local profiles, devices, or Codex/Claude Code support install only the CLI wheel. See [independent run modes](docs/RUN_MODES.en.md).
+
+The CLI requires Python 3.11+.
 
 ```bash
 python3 -m venv .venv
@@ -160,3 +162,4 @@ External data connectors
 - [Cross-version synchronization protocol](docs/VERSIONING.en.md)
 - [Bidirectional web capture](docs/CAPTURE.en.md)
 - [Automatic summary engines](docs/MODEL_ENGINES.en.md)
+- [Independent CLI and extension modes](docs/RUN_MODES.en.md)

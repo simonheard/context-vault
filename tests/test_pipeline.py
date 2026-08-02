@@ -87,6 +87,34 @@ class ImportPipelineTests(unittest.TestCase):
             self.assertTrue(evidence[0]["content"].startswith("[REDACTED:"))
             self.assertNotIn("hunter12345", evidence[0]["content"])
 
+    def test_standalone_browser_backup_import_preserves_review_state(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            backup = root / "contextvault-browser.json"
+            backup.write_text(
+                json.dumps(
+                    {
+                        "schema": 1,
+                        "claims": [
+                            {"attribute": "preference.editor", "value": "VS Code", "status": "confirmed", "sensitivity": "personal", "confidence": 0.9},
+                            {"attribute": "location.current", "value": "New York", "status": "pending", "sensitivity": "private", "confidence": 0.7},
+                            {"attribute": "identity.name", "value": "Rejected", "status": "rejected", "sensitivity": "private"},
+                        ],
+                    }
+                ),
+                encoding="utf-8",
+            )
+            repository = VaultRepository(root / "vault.sqlite")
+            pipeline = ImportPipeline(repository)
+
+            first = pipeline.import_standalone_vault(backup)
+            second = pipeline.import_standalone_vault(backup)
+
+            self.assertEqual(first, {"added": 2, "confirmed": 1, "skipped": 1})
+            self.assertEqual(second["added"], 0)
+            self.assertEqual(len(repository.list_claims(status=ClaimStatus.CONFIRMED)), 1)
+            self.assertEqual(len(repository.list_claims(status=ClaimStatus.CANDIDATE)), 1)
+
 
 if __name__ == "__main__":
     unittest.main()

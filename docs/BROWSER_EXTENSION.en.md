@@ -7,7 +7,7 @@
 The extension uses supported AI pages where the user is already signed in through Chrome. ContextVault never reads, stores, or uploads passwords, cookies, OAuth tokens, or sessions. The extension only:
 
 1. identifies the supported provider and checks that a composer is available;
-2. reads the configured route preview from `127.0.0.1:8787`;
+2. reads a lightweight Chrome Profile vault in standalone mode or configured routes from `127.0.0.1:8787` in connected mode;
 3. pulls the user-authorized current conversation or creates a knowledge-probe chat on a blank page;
 4. displays final text, policy-blocked fields, and sensitive fields requiring per-run approval;
 5. in semi-automatic mode, asks the user to confirm the target account and leaves sending to the user;
@@ -18,17 +18,14 @@ If a provider changes its page structure and the composer adapter stops working,
 
 ## Installation
 
-1. Start the local service:
+1. Open `chrome://extensions`, enable Developer mode, and load the repository's `extension/` directory. The packaged `contextvault-extension.zip` is also available from CI.
+2. For web-only use, choose “use the extension directly.” Python, the CLI, and a local service are not required.
+3. For SQLite, multi-account routes, local models, and complete auditing, start the optional service:
 
    ```bash
    contextvault ui
    ```
 
-2. Open `chrome://extensions` and enable Developer mode.
-3. Select “Load unpacked” and choose the repository's `extension/` directory.
-
-   Alternatively, run `python3 scripts/package_extension.py` to create
-   `dist/contextvault-extension.zip`. Every GitHub Actions build on `main` also publishes the same artifact.
 4. Get the pairing token:
 
    ```bash
@@ -44,7 +41,7 @@ Run `contextvault extension rotate-token` when an already paired extension is no
 
 ## Preparation
 
-Create at least one target account and route:
+Standalone mode requires no pre-created account or route; each Chrome Profile is an isolated account boundary. Connected mode requires at least one target account and route:
 
 ```bash
 contextvault accounts add --platform gemini --label "Personal Gemini"
@@ -63,5 +60,6 @@ The extension shows only enabled routes whose target provider matches the curren
 - automatic pull is off by default and requires per-account acknowledgement; ordinary capture extracts user messages, while probe answers remain low-confidence candidates;
 - `prepared` means content was generated; it enters `dispatching` before the click, `sent_unconfirmed` after the click, and `completed` only after local acknowledgement;
 - a failed page adapter stops safely and does not click unknown elements.
+- export standalone JSON before uninstalling; Chrome storage is not an end-to-end encrypted vault, and `sensitive` claims are excluded from unattended sync by default.
 
 The registry covers 18 global and Chinese web providers; see the [provider adapter matrix](PROVIDERS.en.md). DOM adapters can fall back to copy mode when a provider changes its page. Interactive attachment transfer still requires a provider-specific picker or official API.

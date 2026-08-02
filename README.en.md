@@ -81,7 +81,7 @@ The first release prioritizes:
 
 ## Repository status
 
-This repository now contains a runnable local backbone (v0.6.0):
+This repository now contains a runnable local closed loop (v0.7.0):
 
 - a zero-dependency Python CLI;
 - a SQLite store and explicit domain model centered on `Entity`, `Claim`, `ProviderAccount`, `ProfileSpace`, and `AttachmentRef`;
@@ -91,6 +91,8 @@ This repository now contains a runnable local backbone (v0.6.0):
 - an append-only sync event log and multi-device cursor foundation;
 - repository-level rejection of secret-class data;
 - a working local management GUI and automated tests for the core workflow.
+- official ChatGPT export parsing, pre-storage secret redaction, and deterministic Chinese/English candidate extraction;
+- device scanning, sync policy, preview diffs, profile packages, informed consent, and sync receipts.
 
 ## Quick start
 
@@ -110,25 +112,20 @@ contextvault claims list
 contextvault claims confirm <claim-id>
 contextvault profile show
 contextvault events list
+contextvault import chatgpt-export.zip
+contextvault devices scan
+contextvault routes preview <route-id>
+contextvault sync run <route-id> --output gemini-profile.md
 python3 -m unittest discover -s tests
 ```
 
 ## Later planned commands
 
 ```text
-contextvault import chatgpt-export.zip
-contextvault extract-profile
-contextvault review
-contextvault devices scan
-contextvault diff
-contextvault sync add gemini
-contextvault sync preview gemini
-contextvault sync run gemini
-contextvault privacy show
-contextvault privacy set --target gemini --sensitive ask
-contextvault routes preview <route>
-contextvault summary --type personal
-contextvault summary --type devices
+Browser extension for incremental conversation capture
+Gemini / Claude / ChatGPT page-writing adapters
+End-to-end encrypted multi-device sync server
+Optional local LLM and external data connectors
 ```
 
 ## Documentation
@@ -141,3 +138,4 @@ contextvault summary --type devices
 - [Design recommendations and priorities](docs/DESIGN_RECOMMENDATIONS.en.md)
 - [Local management UI](docs/GUI.en.md)
 - [Attachment references and cross-AI handling](docs/ATTACHMENTS.en.md)
+- [Implementation status and external-integration boundaries](docs/IMPLEMENTATION_STATUS.en.md)

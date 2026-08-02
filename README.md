@@ -77,7 +77,7 @@ ChatGPT 历史对话       设备扫描       手动填写       其他数据源
 
 ## 当前仓库状态
 
-当前已经具备可运行的本地骨干（v0.6.0），包含：
+当前已经具备可运行的本地完整闭环（v0.7.0），包含：
 
 - 零依赖 Python CLI；
 - SQLite 资料库与显式领域模型，核心对象为 `Entity`、`Claim`、`ProviderAccount`、`ProfileSpace` 和 `AttachmentRef`；
@@ -87,6 +87,8 @@ ChatGPT 历史对话       设备扫描       手动填写       其他数据源
 - 只追加同步事件日志和多设备游标基础；
 - 禁止保存秘密级数据的仓储层校验；
 - 可操作的本地管理 GUI，以及覆盖核心闭环的自动化测试。
+- ChatGPT 官方导出解析、入库前秘密脱敏和确定性中英文候选提取；
+- 设备扫描、同步策略、预览 diff、资料包、知情同意与同步回执。
 
 ## 快速开始
 
@@ -106,25 +108,20 @@ contextvault claims list
 contextvault claims confirm <claim-id>
 contextvault profile show
 contextvault events list
+contextvault import chatgpt-export.zip
+contextvault devices scan
+contextvault routes preview <route-id>
+contextvault sync run <route-id> --output gemini-profile.md
 python3 -m unittest discover -s tests
 ```
 
 ## 后续规划命令
 
 ```text
-contextvault import chatgpt-export.zip
-contextvault extract-profile
-contextvault review
-contextvault devices scan
-contextvault diff
-contextvault sync add gemini
-contextvault sync preview gemini
-contextvault sync run gemini
-contextvault privacy show
-contextvault privacy set --target gemini --sensitive ask
-contextvault routes preview <route>
-contextvault summary --type personal
-contextvault summary --type devices
+浏览器扩展捕获增量对话
+Gemini / Claude / ChatGPT 页面写入适配器
+端到端加密多设备同步服务器
+可选本地 LLM 与外部数据连接器
 ```
 
 ## 文档
@@ -137,3 +134,4 @@ contextvault summary --type devices
 - [设计建议与优先级](docs/DESIGN_RECOMMENDATIONS.md)
 - [本地管理后台](docs/GUI.md)
 - [附件引用与跨 AI 处理](docs/ATTACHMENTS.md)
+- [实现状态与外部集成边界](docs/IMPLEMENTATION_STATUS.md)

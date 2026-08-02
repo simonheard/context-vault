@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+from dataclasses import asdict
 import json
 import sqlite3
 import sys
@@ -12,6 +13,10 @@ from contextvault.gui import serve
 from contextvault.domain import ClaimStatus, Sensitivity, SourceType
 from contextvault.repository import VaultRepository
 from contextvault.services import ProfileService, claim_to_dict
+from contextvault.device_agent import scan_device
+from contextvault.pipeline import ImportPipeline
+from contextvault.summaries import SummaryService
+from contextvault.sync_service import SyncService
 
 
 DEFAULT_VAULT = Path(".contextvault/vault.sqlite")
@@ -40,6 +45,12 @@ def build_parser() -> argparse.ArgumentParser:
     account_add = account_commands.add_parser("add", help="add a provider account reference")
     account_add.add_argument("--platform", required=True, choices=["chatgpt", "gemini", "claude", "other"])
     account_add.add_argument("--label", required=True)
+    account_rename = account_commands.add_parser("rename", help="rename a local account label")
+    account_rename.add_argument("account_id")
+    account_rename.add_argument("--label", required=True)
+    for action in ("disconnect", "revoke"):
+        action_parser = account_commands.add_parser(action, help=f"{action} an account reference")
+        action_parser.add_argument("account_id")
 
     spaces_parser = subparsers.add_parser("spaces", help="manage profile spaces")
     space_commands = spaces_parser.add_subparsers(dest="space_command", required=True)
@@ -67,12 +78,20 @@ def build_parser() -> argparse.ArgumentParser:
     claim_confirm.add_argument("claim_id")
     claim_reject = claim_commands.add_parser("reject", help="reject a candidate claim")
     claim_reject.add_argument("claim_id")
+    claim_confirm_all = claim_commands.add_parser("confirm-all", help="confirm all candidates")
+    claim_confirm_all.add_argument("--space")
+    claim_delete = claim_commands.add_parser("delete", help="permanently delete a local claim")
+    claim_delete.add_argument("claim_id")
+    claim_search = claim_commands.add_parser("search", help="full-text search claims")
+    claim_search.add_argument("query")
 
     profile_parser = subparsers.add_parser("profile", help="render the canonical profile")
     profile_commands = profile_parser.add_subparsers(dest="profile_command", required=True)
     profile_show = profile_commands.add_parser("show", help="show confirmed profile claims")
     profile_show.add_argument("--space", default="personal")
     profile_show.add_argument("--format", choices=["markdown", "json"], default="markdown")
+    profile_health = profile_commands.add_parser("health", help="show profile health and review counts")
+    profile_health.add_argument("--space", default="personal")
 
     events_parser = subparsers.add_parser("events", help="inspect the append-only sync log")
     event_commands = events_parser.add_subparsers(dest="event_command", required=True)
@@ -102,6 +121,72 @@ def build_parser() -> argparse.ArgumentParser:
         choices=[item.value for item in Sensitivity],
         default=Sensitivity.PRIVATE.value,
     )
+
+    import_parser = subparsers.add_parser("import", help="import provider data exports")
+    import_parser.add_argument("source", type=Path, help="ChatGPT export ZIP or conversations.json")
+    import_parser.add_argument("--account")
+    import_parser.add_argument("--space", default="personal")
+    import_parser.add_argument("--no-extract", action="store_true")
+
+    imports_parser = subparsers.add_parser("imports", help="list completed source imports")
+    imports_parser.add_argument("list", nargs="?")
+
+    devices_parser = subparsers.add_parser("devices", help="scan and list local devices")
+    device_commands = devices_parser.add_subparsers(dest="device_command", required=True)
+    device_commands.add_parser("list", help="list known devices")
+    device_scan = device_commands.add_parser("scan", help="scan approved non-secret metadata")
+    device_scan.add_argument("--name")
+
+    routes_parser = subparsers.add_parser("routes", help="manage account sync routes")
+    route_commands = routes_parser.add_subparsers(dest="route_command", required=True)
+    route_commands.add_parser("list", help="list routes")
+    route_add = route_commands.add_parser("add", help="add source-space-target route")
+    route_add.add_argument("--from", dest="source_account")
+    route_add.add_argument("--space", default="personal")
+    route_add.add_argument("--to", dest="target_account", required=True)
+    route_add.add_argument("--categories", default="*")
+    route_add.add_argument(
+        "--max-sensitivity",
+        choices=[item.value for item in Sensitivity if item is not Sensitivity.SECRET],
+        default="personal",
+    )
+    route_add.add_argument("--sensitive", choices=["block", "ask", "allow"], default="block")
+    route_add.add_argument("--budget", type=int, default=12000)
+    route_add.add_argument(
+        "--attachments",
+        choices=["exclude", "reference", "extracted_text", "transfer"],
+        default="reference",
+    )
+    route_preview = route_commands.add_parser("preview", help="preview filtered content and diff")
+    route_preview.add_argument("route_id")
+    route_preview.add_argument("--approve-sensitive", action="store_true")
+    route_disable = route_commands.add_parser("disable", help="disable a sync route")
+    route_disable.add_argument("route_id")
+
+    sync_parser = subparsers.add_parser("sync", help="create a local sync package and receipt")
+    sync_commands = sync_parser.add_subparsers(dest="sync_command", required=True)
+    sync_run = sync_commands.add_parser("run", help="finalize an approved sync package")
+    sync_run.add_argument("route_id")
+    sync_run.add_argument("--approve-sensitive", action="store_true")
+    sync_run.add_argument("--output", type=Path, help="write the generated Markdown package")
+    sync_commands.add_parser("receipts", help="list sync receipts")
+
+    privacy_parser = subparsers.add_parser("privacy", help="manage sensitive-data consent")
+    privacy_commands = privacy_parser.add_subparsers(dest="privacy_command", required=True)
+    privacy_commands.add_parser("enable-sensitive", help="enable the global sensitive-data gate")
+    privacy_commands.add_parser("disable-sensitive", help="disable the global sensitive-data gate")
+    privacy_consent = privacy_commands.add_parser("consent", help="record informed consent for a route")
+    privacy_consent.add_argument("route_id")
+    privacy_consent.add_argument("--categories", required=True)
+    privacy_consent.add_argument("--mode", choices=["ask", "allow"], required=True)
+    privacy_revoke = privacy_commands.add_parser("revoke", help="revoke a consent receipt")
+    privacy_revoke.add_argument("consent_id")
+
+    summary_parser = subparsers.add_parser("summary", help="render a purpose-specific summary")
+    summary_parser.add_argument(
+        "--type", choices=["personal", "full", "work", "project", "devices", "recent"], required=True
+    )
+    summary_parser.add_argument("--space", default="personal")
     return parser
 
 
@@ -138,6 +223,81 @@ def main(argv: list[str] | None = None) -> int:
                 raise ValueError("The management UI may only bind to a loopback host")
             serve(args.vault, args.host, args.port)
             return 0
+        if args.command == "import":
+            result = ImportPipeline(VaultRepository(args.vault)).import_chatgpt(
+                args.source,
+                account_id=args.account,
+                space=args.space,
+                extract=not args.no_extract,
+            )
+            print(json.dumps(asdict(result), ensure_ascii=False, indent=2))
+            return 0
+        if args.command == "imports":
+            print(json.dumps(VaultRepository(args.vault).list_imports(), ensure_ascii=False, indent=2))
+            return 0
+        if args.command == "devices":
+            repository = VaultRepository(args.vault)
+            if args.device_command == "scan":
+                print(json.dumps(repository.upsert_device_scan(scan_device(args.name)), ensure_ascii=False, indent=2))
+            else:
+                print(json.dumps(repository.list_devices(), ensure_ascii=False, indent=2))
+            return 0
+        if args.command in {"routes", "sync", "privacy"}:
+            sync_service = SyncService(VaultRepository(args.vault))
+            if args.command == "routes":
+                if args.route_command == "add":
+                    policy = {
+                        "allowed_categories": [item.strip() for item in args.categories.split(",") if item.strip()],
+                        "max_sensitivity": args.max_sensitivity,
+                        "sensitive_mode": args.sensitive,
+                        "summary_budget_chars": args.budget,
+                        "attachment_mode": args.attachments,
+                    }
+                    result = sync_service.add_route(
+                        source_account_id=args.source_account,
+                        space=args.space,
+                        target_account_id=args.target_account,
+                        policy=policy,
+                    )
+                elif args.route_command == "preview":
+                    result = asdict(sync_service.preview(args.route_id, args.approve_sensitive))
+                elif args.route_command == "disable":
+                    sync_service.disable_route(args.route_id)
+                    result = {"route_id": args.route_id, "enabled": False}
+                else:
+                    result = sync_service.list_routes()
+            elif args.command == "sync":
+                if args.sync_command == "run":
+                    result = sync_service.run(args.route_id, args.approve_sensitive)
+                    if args.output:
+                        args.output.expanduser().resolve().write_text(
+                            result["content"], encoding="utf-8"
+                        )
+                        result["output"] = str(args.output)
+                else:
+                    result = sync_service.list_receipts()
+            elif args.privacy_command == "enable-sensitive":
+                sync_service.set_sensitive_sync(True)
+                result = {"sensitive_sync_enabled": True}
+            elif args.privacy_command == "disable-sensitive":
+                sync_service.set_sensitive_sync(False)
+                result = {"sensitive_sync_enabled": False}
+            elif args.privacy_command == "revoke":
+                sync_service.revoke_consent(args.consent_id)
+                result = {"consent_id": args.consent_id, "revoked": True}
+            else:
+                result = {
+                    "consent_id": sync_service.record_consent(
+                        args.route_id,
+                        [item.strip() for item in args.categories.split(",") if item.strip()],
+                        args.mode,
+                    )
+                }
+            print(json.dumps(result, ensure_ascii=False, indent=2))
+            return 0
+        if args.command == "summary":
+            print(SummaryService(VaultRepository(args.vault)).render(args.type, args.space))
+            return 0
         if args.command in {
             "accounts",
             "spaces",
@@ -152,6 +312,19 @@ def main(argv: list[str] | None = None) -> int:
                 if args.account_command == "add":
                     account = repository.add_account(args.platform, args.label)
                     print(f"Added account: {account.id} ({account.account_label})")
+                    return 0
+                if args.account_command == "rename":
+                    account = repository.update_account(args.account_id, label=args.label)
+                    print(f"Renamed account: {account.id} ({account.account_label})")
+                    return 0
+                if args.account_command in {"disconnect", "revoke"}:
+                    account = repository.update_account(
+                        args.account_id,
+                        status={"disconnect": "disconnected", "revoke": "revoked"}[
+                            args.account_command
+                        ],
+                    )
+                    print(f"Updated account: {account.id} ({account.status})")
                     return 0
                 for account in repository.list_accounts():
                     print(f"{account.id}\t{account.platform}\t{account.account_label}\t{account.status}")
@@ -185,11 +358,26 @@ def main(argv: list[str] | None = None) -> int:
                     claim = service.reject(args.claim_id)
                     print(f"Rejected claim: {claim.id}")
                     return 0
+                if args.claim_command == "confirm-all":
+                    claims = service.confirm_all(args.space)
+                    print(f"Confirmed claims: {len(claims)}")
+                    return 0
+                if args.claim_command == "delete":
+                    repository.delete_claim(args.claim_id)
+                    print(f"Deleted claim: {args.claim_id}")
+                    return 0
+                if args.claim_command == "search":
+                    claims = repository.search_claims(args.query)
+                    print(json.dumps([claim_to_dict(claim) for claim in claims], ensure_ascii=False, indent=2))
+                    return 0
                 selected_status = ClaimStatus(args.status) if args.status else None
                 claims = repository.list_claims(status=selected_status, space=args.space)
                 print(json.dumps([claim_to_dict(claim) for claim in claims], ensure_ascii=False, indent=2))
                 return 0
             if args.command == "profile":
+                if args.profile_command == "health":
+                    print(json.dumps(service.health(args.space), ensure_ascii=False, indent=2))
+                    return 0
                 if args.format == "json":
                     print(json.dumps(service.current_profile(args.space), ensure_ascii=False, indent=2))
                 else:

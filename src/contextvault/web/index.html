@@ -67,7 +67,7 @@
         </section>
 
         <section class="view" id="profile-view">
-          <div class="section-intro"><div><h2>用户资料</h2><p>候选资料经过确认后才进入标准档案。</p></div><button class="primary" disabled>导入 ChatGPT 数据</button></div>
+          <div class="section-intro"><div><h2>用户资料</h2><p>候选资料经过确认后才进入标准档案。</p></div><button class="secondary" id="confirm-all">确认全部候选</button></div>
           <div class="grid form-layout">
             <article class="panel"><h3>资料与候选队列</h3><div id="claims-list" class="list"><p class="muted">正在读取…</p></div></article>
             <article class="panel">
@@ -80,6 +80,15 @@
                 <p class="form-hint">秘密级别数据禁止保存。新增内容先进入候选队列。</p>
                 <button class="primary" type="submit">添加候选</button>
                 <p class="form-message" id="claim-message" role="status"></p>
+              </form>
+              <hr>
+              <h3>导入 ChatGPT 官方导出</h3>
+              <form id="import-form">
+                <label>本机 ZIP/JSON 路径<input name="path" placeholder="/Users/me/Downloads/chatgpt-export.zip" required></label>
+                <label>来源账号<select name="account_id" id="import-account"><option value="">不指定账号</option></select></label>
+                <p class="form-hint">只读取官方导出；命中密码、密钥或 Token 的消息会在入库前整体脱敏。</p>
+                <button class="secondary" type="submit">导入并提取候选</button>
+                <p class="form-message" id="import-message" role="status"></p>
               </form>
             </article>
           </div>
@@ -113,12 +122,15 @@
           </div>
         </section>
 
-        <section class="view" id="routes-view"><div class="section-intro"><div><h2>同步路线</h2><p>明确来源账号、身份空间和目标账号。</p></div></div><article class="panel"><div class="empty-state tall"><strong>尚未建立同步路线</strong><p>添加至少两个账号后，可以设置个人 ChatGPT → 个人 Gemini 等路线。</p></div></article></section>
-        <section class="view" id="devices-view"><div class="section-intro"><div><h2>设备</h2><p>只采集你允许的硬件、系统、软件和非敏感配置。</p></div></div><article class="panel"><div class="empty-state tall"><strong>暂无设备</strong><p>设备 Agent 将在本地生成扫描预览，不会读取密钥或认证文件。</p></div></article></section>
+        <section class="view" id="routes-view">
+          <div class="section-intro"><div><h2>同步路线</h2><p>明确来源账号、身份空间和目标账号。</p></div></div>
+          <div class="grid form-layout"><article class="panel"><h3>现有路线</h3><div id="routes-list" class="list"><p class="muted">正在读取…</p></div></article><article class="panel"><h3>创建同步路线</h3><form id="route-form"><label>来源账号<select name="source_account_id" id="route-source"><option value="">所有已确认来源</option></select></label><label>身份空间<select name="space" id="route-space"></select></label><label>目标账号<select name="target_account_id" id="route-target" required></select></label><label>允许类别<input name="categories" value="*" placeholder="identity,preference"></label><label>最高敏感级别<select name="max_sensitivity"><option value="personal">个人</option><option value="private">私密</option><option value="sensitive">敏感</option></select></label><label>敏感策略<select name="sensitive_mode"><option value="block">永不发送</option><option value="ask">每次询问</option><option value="allow">已授权时自动允许</option></select></label><label>附件方式<select name="attachment_mode"><option value="reference">只同步引用</option><option value="extracted_text">同步已批准提取文本</option><option value="exclude">不包含附件</option><option value="transfer">即时转传（需要提供商适配器）</option></select></label><button class="primary" type="submit">创建路线</button><p class="form-message" id="route-message" role="status"></p></form></article></div>
+        </section>
+        <section class="view" id="devices-view"><div class="section-intro"><div><h2>设备</h2><p>只采集硬件、系统、工具版本和白名单元数据。</p></div><button class="primary" id="scan-device">扫描本机</button></div><article class="panel"><div id="devices-list" class="list"><p class="muted">正在读取…</p></div></article></section>
 
         <section class="view" id="privacy-view">
           <div class="section-intro"><div><h2>隐私与授权</h2><p>敏感信息默认关闭，授权按账号和类别管理。</p></div></div>
-          <article class="panel privacy-card"><div><span class="status-dot safe"></span><strong>敏感信息自动同步</strong><p>当前关闭。秘密级别数据始终禁止保存和发送。</p></div><button class="secondary" disabled>配置策略</button></article>
+          <article class="panel privacy-card"><div><span class="status-dot safe"></span><strong>敏感信息同步总开关</strong><p id="privacy-status">正在读取… 秘密级别数据始终禁止保存和发送。</p></div><button class="secondary" id="privacy-toggle">切换</button></article>
           <div class="grid three-columns">
             <article class="policy block"><span>BLOCK</span><h3>永不发送</h3><p>健康、财务、法律等资料被策略移除。</p></article>
             <article class="policy ask"><span>ASK</span><h3>每次询问</h3><p>同步前逐项展示并要求确认。</p></article>
@@ -126,7 +138,7 @@
           </div>
         </section>
 
-        <section class="view" id="history-view"><div class="section-intro"><div><h2>同步历史</h2><p>每次资料、账号和身份空间变化都进入只追加事件日志。</p></div></div><article class="panel"><div id="events-list" class="list"><p class="muted">正在读取…</p></div></article></section>
+        <section class="view" id="history-view"><div class="section-intro"><div><h2>同步历史</h2><p>每次资料、账号和身份空间变化都进入只追加事件日志。</p></div></div><div class="grid two-columns"><article class="panel"><h3>事件日志</h3><div id="events-list" class="list"><p class="muted">正在读取…</p></div></article><article class="panel"><h3>同步回执</h3><div id="receipts-list" class="list"><p class="muted">正在读取…</p></div></article></div></section>
       </main>
     </div>
     <script src="/app.js"></script>

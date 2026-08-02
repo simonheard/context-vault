@@ -58,12 +58,13 @@ function emptyMessage(text) {
 }
 
 async function loadDashboard() {
-  const { counts } = await api("/api/dashboard");
+  const [{ counts }, health] = await Promise.all([api("/api/dashboard"), api("/api/profile/health")]);
   document.getElementById("metric-claims").textContent = counts.claims;
   document.getElementById("metric-candidates").textContent = counts.candidates;
   document.getElementById("metric-accounts").textContent = counts.accounts;
   document.getElementById("metric-devices").textContent = counts.devices;
   document.getElementById("review-notice").hidden = counts.candidates === 0;
+  document.querySelector(".score").textContent = `${health.score}%`;
 }
 
 async function loadAccounts() {
@@ -78,6 +79,23 @@ async function loadAccounts() {
   items.forEach((item) => list.append(listItem(item.account_label, item.platform, item.status)));
   summary.className = "list";
   summary.replaceChildren(...items.slice(0, 3).map((item) => listItem(item.account_label, item.platform, "未同步")));
+  ["route-source", "route-target", "import-account"].forEach((id) => {
+    const selector = document.getElementById(id);
+    const optional = id !== "route-target";
+    selector.replaceChildren();
+    if (optional) {
+      const blank = document.createElement("option");
+      blank.value = "";
+      blank.textContent = id === "import-account" ? "不指定账号" : "所有已确认来源";
+      selector.append(blank);
+    }
+    items.forEach((item) => {
+      const option = document.createElement("option");
+      option.value = item.id;
+      option.textContent = `${item.account_label} (${item.platform})`;
+      selector.append(option);
+    });
+  });
 }
 
 async function loadSpaces() {
@@ -86,6 +104,13 @@ async function loadSpaces() {
   list.replaceChildren(...items.map((item) => listItem(item.display_name, item.name, item.is_default ? "默认" : "隔离")));
   const selector = document.getElementById("claim-space");
   selector.replaceChildren(...items.map((item) => {
+    const option = document.createElement("option");
+    option.value = item.name;
+    option.textContent = item.display_name;
+    return option;
+  }));
+  const routeSelector = document.getElementById("route-space");
+  routeSelector.replaceChildren(...items.map((item) => {
     const option = document.createElement("option");
     option.value = item.name;
     option.textContent = item.display_name;
@@ -140,6 +165,91 @@ async function loadEvents() {
   });
 }
 
+async function loadDevices() {
+  const { items } = await api("/api/devices");
+  const list = document.getElementById("devices-list");
+  list.replaceChildren();
+  if (!items.length) {
+    list.append(emptyMessage("暂无设备。扫描只会采集白名单元数据。"));
+    return;
+  }
+  items.forEach((item) => {
+    const config = item.config;
+    list.append(listItem(item.display_name, `${config.os} ${config.os_release} · ${config.architecture}`, `${Object.keys(config.tools || {}).length} tools`));
+  });
+}
+
+async function previewRoute(routeId, sync = false) {
+  try {
+    const previewResult = await api(`/api/routes/${routeId}/preview`, { method: "POST", body: "{}" });
+    let item = previewResult.item;
+    let approveSensitive = false;
+    if (item.awaiting_confirmation.length) {
+      const approved = window.confirm(`${item.awaiting_confirmation.length} 条私密或敏感资料需要本次确认。是否加入预览？`);
+      if (approved) {
+        const approvedResult = await api(`/api/routes/${routeId}/preview`, { method: "POST", body: JSON.stringify({ approve_sensitive: true }) });
+        item = approvedResult.item;
+        approveSensitive = true;
+      }
+    }
+    if (sync) {
+      const result = await api(`/api/routes/${routeId}/sync`, { method: "POST", body: JSON.stringify({ approve_sensitive: approveSensitive }) });
+      window.alert(`同步包与回执已生成：${result.item.version}`);
+    } else {
+      window.alert(item.content);
+    }
+    await Promise.all([loadRoutes(), loadReceipts(), loadEvents()]);
+  } catch (error) {
+    window.alert(error.message);
+  }
+}
+
+async function loadRoutes() {
+  const { items } = await api("/api/routes");
+  const list = document.getElementById("routes-list");
+  list.replaceChildren();
+  if (!items.length) {
+    list.append(emptyMessage("尚未建立同步路线。"));
+    return;
+  }
+  items.forEach((item) => {
+    const row = listItem(`${item.source_label || "全部来源"} → ${item.target_label}`, item.space_name, item.enabled ? "启用" : "停用");
+    const actions = row.querySelector(".chip");
+    actions.className = "row-actions";
+    actions.replaceChildren();
+    const preview = document.createElement("button");
+    preview.className = "mini-button confirm";
+    preview.textContent = "预览";
+    preview.addEventListener("click", () => previewRoute(item.id));
+    const sync = document.createElement("button");
+    sync.className = "mini-button";
+    sync.textContent = "生成回执";
+    sync.addEventListener("click", () => previewRoute(item.id, true));
+    actions.append(preview, sync);
+    list.append(row);
+  });
+}
+
+let sensitiveSyncEnabled = false;
+async function loadPrivacy() {
+  const result = await api("/api/privacy");
+  sensitiveSyncEnabled = result.sensitive_sync_enabled;
+  document.getElementById("privacy-status").textContent = sensitiveSyncEnabled
+    ? "当前开启；每条资料仍受路线级 block / ask / allow 策略约束。"
+    : "当前关闭；所有私密和敏感资料都被强制阻止。";
+}
+
+async function loadReceipts() {
+  const { items } = await api("/api/receipts");
+  const list = document.getElementById("receipts-list");
+  list.replaceChildren();
+  if (!items.length) {
+    list.append(emptyMessage("暂无同步回执。"));
+    return;
+  }
+  items.forEach((item) => list.append(listItem(item.profile_version, `${item.manifest.claims.length} claims`, item.status)));
+}
+
 document.getElementById("account-form").addEventListener("submit", async (event) => {
   event.preventDefault();
   const form = event.currentTarget;
@@ -191,6 +301,61 @@ document.getElementById("claim-form").addEventListener("submit", async (event) =
   }
 });
 
-Promise.all([loadDashboard(), loadAccounts(), loadSpaces(), loadClaims(), loadEvents()]).catch((error) => {
+document.getElementById("confirm-all").addEventListener("click", async () => {
+  await api("/api/claims/confirm-all", { method: "POST", body: "{}" });
+  await Promise.all([loadClaims(), loadDashboard(), loadEvents()]);
+});
+
+document.getElementById("import-form").addEventListener("submit", async (event) => {
+  event.preventDefault();
+  const form = event.currentTarget;
+  const message = document.getElementById("import-message");
+  try {
+    const { item } = await api("/api/imports", { method: "POST", body: JSON.stringify(Object.fromEntries(new FormData(form))) });
+    message.className = "form-message";
+    message.textContent = `已导入 ${item.messages} 条消息，新增 ${item.candidates} 条候选。`;
+    await Promise.all([loadClaims(), loadDashboard(), loadEvents()]);
+  } catch (error) {
+    message.className = "form-message error";
+    message.textContent = error.message;
+  }
+});
+
+document.getElementById("route-form").addEventListener("submit", async (event) => {
+  event.preventDefault();
+  const form = event.currentTarget;
+  const message = document.getElementById("route-message");
+  try {
+    await api("/api/routes", { method: "POST", body: JSON.stringify(Object.fromEntries(new FormData(form))) });
+    message.className = "form-message";
+    message.textContent = "同步路线已创建，发送前请先预览。";
+    await Promise.all([loadRoutes(), loadDashboard(), loadEvents()]);
+  } catch (error) {
+    message.className = "form-message error";
+    message.textContent = error.message;
+  }
+});
+
+document.getElementById("scan-device").addEventListener("click", async () => {
+  const button = document.getElementById("scan-device");
+  button.disabled = true;
+  try {
+    await api("/api/devices/scan", { method: "POST", body: "{}" });
+    await Promise.all([loadDevices(), loadDashboard(), loadEvents()]);
+  } catch (error) {
+    window.alert(error.message);
+  } finally {
+    button.disabled = false;
+  }
+});
+
+document.getElementById("privacy-toggle").addEventListener("click", async () => {
+  const action = sensitiveSyncEnabled ? "disable" : "enable";
+  if (!sensitiveSyncEnabled && !window.confirm("开启后数据仍会受每条路线策略控制。发送到第三方后，ContextVault 无法保证对方删除或忘记内容。确定开启吗？")) return;
+  await api(`/api/privacy/${action}`, { method: "POST", body: "{}" });
+  await Promise.all([loadPrivacy(), loadEvents()]);
+});
+
+Promise.all([loadDashboard(), loadAccounts(), loadSpaces(), loadClaims(), loadEvents(), loadDevices(), loadRoutes(), loadPrivacy(), loadReceipts()]).catch((error) => {
   document.querySelector("main").dataset.error = error.message;
 });

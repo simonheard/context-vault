@@ -74,6 +74,7 @@ main { min-width: 0; padding: 0 36px 48px; }
 .section-intro h2 { font-size: 22px; }
 .section-intro p { color: var(--muted); margin: 6px 0 0; font-size: 13px; }
 form { display: grid; gap: 14px; }
+hr { border: 0; border-top: 1px solid var(--line); margin: 24px 0; }
 label { display: grid; gap: 6px; font-size: 12px; font-weight: 700; }
 input, select { width: 100%; border: 1px solid #cfd8d1; border-radius: 8px; padding: 10px 11px; background: #fff; color: var(--ink); }
 input:focus, select:focus, button:focus-visible { outline: 3px solid rgba(51, 130, 88, .2); outline-offset: 1px; }

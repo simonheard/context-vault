@@ -21,7 +21,10 @@ The current implementation provides:
 - vault counts for claims, candidates, accounts, devices, spaces, routes, and receipts;
 - provider account listing and local account-reference creation;
 - identity-space listing and creation;
-- interface structure for profiles, routes, devices, privacy, and history;
+- manual candidates, ChatGPT export import, and individual/bulk review;
+- allowlisted device scanning and device-environment listing;
+- route creation, policy configuration, final-content preview, and receipt generation;
+- the sensitive-sync master gate, risk confirmation, event history, and sync receipts;
 - responsive desktop and mobile layout;
 - loopback-only binding that rejects public addresses.
 

@@ -23,7 +23,7 @@ class CliTests(unittest.TestCase):
 
             self.assertEqual(init_code, 0)
             self.assertEqual(status_code, 0)
-            self.assertEqual(status(vault_path).schema_version, 5)
+            self.assertEqual(status(vault_path).schema_version, 7)
             self.assertIn("Claims: 0", output.getvalue())
             self.assertIn("Devices: 0", output.getvalue())
             self.assertIn("Provider accounts: 0", output.getvalue())
@@ -57,6 +57,9 @@ class CliTests(unittest.TestCase):
                     "attachment_refs",
                     "sync_events",
                     "device_sync_cursors",
+                    "source_imports",
+                    "evidence_messages",
+                    "generated_summaries",
                     "claims_fts",
                 }.issubset(tables)
             )

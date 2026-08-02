@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import json
 import sqlite3
 from contextlib import contextmanager
@@ -20,6 +21,8 @@ from contextvault.domain import (
     utc_now,
 )
 from contextvault.vault import initialize
+from contextvault.importers import ImportBundle, ImportedMessage
+from contextvault.security import find_secrets, reject_secrets
 
 
 class VaultRepository:
@@ -81,6 +84,43 @@ class VaultRepository:
             ).fetchall()
         return [_account_from_row(row) for row in rows]
 
+    def update_account(
+        self, account_id: str, *, label: Optional[str] = None, status: Optional[str] = None
+    ) -> ProviderAccount:
+        if status is not None and status not in {"active", "disconnected", "revoked"}:
+            raise ValueError("Invalid account status")
+        if label is not None and not 1 <= len(label.strip()) <= 80:
+            raise ValueError("Account label must be between 1 and 80 characters")
+        with self.transaction() as connection:
+            row = connection.execute(
+                "SELECT * FROM provider_accounts WHERE id = ?", (account_id,)
+            ).fetchone()
+            if row is None:
+                raise ValueError("Unknown provider account")
+            new_label = label.strip() if label is not None else row["account_label"]
+            new_status = status or row["status"]
+            now = utc_now()
+            connection.execute(
+                "UPDATE provider_accounts SET account_label = ?, status = ?, updated_at = ? WHERE id = ?",
+                (new_label, new_status, now, account_id),
+            )
+            if new_status != "active":
+                connection.execute(
+                    "UPDATE sync_targets SET enabled = 0 WHERE account_id = ?", (account_id,)
+                )
+                connection.execute(
+                    "UPDATE sync_routes SET enabled = 0, updated_at = ? WHERE source_account_id = ?",
+                    (now, account_id),
+                )
+            self._append_event(
+                connection,
+                "account.updated",
+                "provider_account",
+                account_id,
+                {"label": new_label, "status": new_status},
+            )
+        return next(item for item in self.list_accounts() if item.id == account_id)
+
     def add_attachment_ref(
         self,
         *,
@@ -107,6 +147,8 @@ class VaultRepository:
             raise ValueError("Attachment size must not be negative")
         if sensitivity is Sensitivity.SECRET:
             raise ValueError("Secret-class data must not be stored")
+        if extracted_text:
+            reject_secrets(extracted_text)
         now = utc_now()
         attachment = AttachmentRef(
             id=f"attachment_{uuid4().hex}",
@@ -177,6 +219,102 @@ class VaultRepository:
         with self.transaction() as connection:
             rows = connection.execute(query, parameters).fetchall()
         return [_attachment_from_row(row) for row in rows]
+
+    def store_import(
+        self, bundle: ImportBundle, account_id: Optional[str] = None
+    ) -> dict[str, Any]:
+        with self.transaction() as connection:
+            existing = connection.execute(
+                "SELECT * FROM source_imports WHERE source_hash = ?",
+                (bundle.source_hash,),
+            ).fetchone()
+            if existing is not None:
+                return dict(existing)
+            import_id = f"import_{uuid4().hex}"
+            now = utc_now()
+            connection.execute(
+                """
+                INSERT INTO source_imports(
+                    id, source_type, account_id, source_name, source_hash,
+                    conversation_count, message_count, status, created_at, completed_at
+                ) VALUES (?, 'chatgpt_export', ?, ?, ?, ?, ?, 'completed', ?, ?)
+                """,
+                (
+                    import_id,
+                    account_id,
+                    bundle.source_name,
+                    bundle.source_hash,
+                    bundle.conversation_count,
+                    len(bundle.messages),
+                    now,
+                    now,
+                ),
+            )
+            for message in bundle.messages:
+                self._insert_evidence_message(connection, import_id, account_id, message, now)
+            payload = {
+                "source_name": bundle.source_name,
+                "conversation_count": bundle.conversation_count,
+                "message_count": len(bundle.messages),
+            }
+            self._append_event(connection, "import.completed", "source_import", import_id, payload)
+            return {"id": import_id, "status": "completed", **payload}
+
+    def list_imports(self) -> list[dict[str, Any]]:
+        with self.transaction() as connection:
+            rows = connection.execute(
+                "SELECT * FROM source_imports ORDER BY created_at DESC"
+            ).fetchall()
+        return [dict(row) for row in rows]
+
+    def list_evidence_messages(
+        self, import_id: str, role: Optional[str] = None
+    ) -> list[dict[str, Any]]:
+        query = "SELECT * FROM evidence_messages WHERE import_id = ?"
+        parameters: list[Any] = [import_id]
+        if role is not None:
+            query += " AND role = ?"
+            parameters.append(role)
+        query += " ORDER BY created_at, id"
+        with self.transaction() as connection:
+            rows = connection.execute(query, parameters).fetchall()
+        return [dict(row) for row in rows]
+
+    def _insert_evidence_message(
+        self,
+        connection: sqlite3.Connection,
+        import_id: str,
+        account_id: Optional[str],
+        message: ImportedMessage,
+        imported_at: str,
+    ) -> None:
+        content = message.content
+        secret_matches = find_secrets(content)
+        if secret_matches:
+            kinds = ",".join(sorted({item.kind for item in secret_matches}))
+            content = f"[REDACTED: secret-class content ({kinds})]"
+        content_hash = hashlib.sha256(content.encode()).hexdigest()
+        connection.execute(
+            """
+            INSERT OR IGNORE INTO evidence_messages(
+                id, import_id, account_id, conversation_id, conversation_title,
+                provider_message_id, role, content, content_hash, created_at, imported_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                f"evidence_{uuid4().hex}",
+                import_id,
+                account_id,
+                message.conversation_id,
+                message.conversation_title,
+                message.message_id,
+                message.role,
+                content,
+                content_hash,
+                message.created_at,
+                imported_at,
+            ),
+        )
 
     def add_space(self, name: str, display_name: str) -> ProfileSpace:
         name = name.strip().lower().replace(" ", "-")
@@ -273,6 +411,7 @@ class VaultRepository:
         text = (value_text if value_text is not None else str(value)).strip()
         if not text:
             raise ValueError("Claim value must not be empty")
+        reject_secrets(text)
         now = utc_now()
         observed_at = source.observed_at if source else now
         claim = Claim(
@@ -382,6 +521,41 @@ class VaultRepository:
             ).fetchall()
         return [_claim_from_row(row) for row in rows]
 
+    def search_claims(self, query: str, limit: int = 50) -> list[Claim]:
+        query = query.strip()
+        if not query:
+            return []
+        with self.transaction() as connection:
+            rows = connection.execute(
+                """
+                SELECT c.* FROM claims_fts f
+                JOIN claims c ON c.id = f.claim_id
+                WHERE claims_fts MATCH ? ORDER BY rank LIMIT ?
+                """,
+                (query, limit),
+            ).fetchall()
+        return [_claim_from_row(row) for row in rows]
+
+    def claim_sources(self, claim_id: str) -> list[dict[str, Any]]:
+        with self.transaction() as connection:
+            rows = connection.execute(
+                "SELECT * FROM claim_sources WHERE claim_id = ? ORDER BY observed_at",
+                (claim_id,),
+            ).fetchall()
+        return [dict(row) for row in rows]
+
+    def delete_claim(self, claim_id: str) -> None:
+        claim = self.get_claim(claim_id)
+        with self.transaction() as connection:
+            connection.execute("DELETE FROM claims WHERE id = ?", (claim_id,))
+            self._append_event(
+                connection,
+                "claim.deleted",
+                "claim",
+                claim_id,
+                {"attribute": claim.attribute},
+            )
+
     def transition_claim(self, claim_id: str, status: ClaimStatus) -> Claim:
         current = self.get_claim(claim_id)
         allowed = {
@@ -451,6 +625,84 @@ class VaultRepository:
                 """,
                 (device_id, sequence, utc_now()),
             )
+
+    def upsert_device_scan(self, scan: dict[str, Any]) -> dict[str, Any]:
+        fingerprint = str(scan["fingerprint"])
+        now = utc_now()
+        with self.transaction() as connection:
+            existing = connection.execute(
+                "SELECT d.*, e.display_name FROM devices d JOIN entities e ON e.id = d.entity_id WHERE d.fingerprint = ?",
+                (fingerprint,),
+            ).fetchone()
+            config_json = json.dumps(scan["config"], ensure_ascii=False, sort_keys=True)
+            if existing is None:
+                entity_id = f"entity_{uuid4().hex}"
+                device_id = f"device_{uuid4().hex}"
+                connection.execute(
+                    "INSERT INTO entities(id, kind, display_name, created_at, updated_at) VALUES (?, 'device', ?, ?, ?)",
+                    (entity_id, scan["display_name"], now, now),
+                )
+                connection.execute(
+                    "INSERT INTO devices(id, entity_id, device_type, fingerprint, last_seen_at, config_json) VALUES (?, ?, ?, ?, ?, ?)",
+                    (device_id, entity_id, scan["device_type"], fingerprint, now, config_json),
+                )
+                event_type = "device.created"
+                previous_config: dict[str, Any] = {}
+            else:
+                device_id = str(existing["id"])
+                previous_config = json.loads(existing["config_json"])
+                connection.execute(
+                    "UPDATE devices SET device_type = ?, last_seen_at = ?, config_json = ? WHERE id = ?",
+                    (scan["device_type"], now, config_json, device_id),
+                )
+                connection.execute(
+                    "UPDATE entities SET display_name = ?, updated_at = ? WHERE id = ?",
+                    (scan["display_name"], now, existing["entity_id"]),
+                )
+                event_type = "device.updated"
+            changed = {
+                key: {"before": previous_config.get(key), "after": value}
+                for key, value in scan["config"].items()
+                if previous_config.get(key) != value
+            }
+            self._append_event(
+                connection,
+                event_type,
+                "device",
+                device_id,
+                {"display_name": scan["display_name"], "changes": changed},
+            )
+        return {"id": device_id, **scan, "last_seen_at": now, "changes": changed}
+
+    def list_devices(self) -> list[dict[str, Any]]:
+        with self.transaction() as connection:
+            rows = connection.execute(
+                """
+                SELECT d.*, e.display_name FROM devices d
+                JOIN entities e ON e.id = d.entity_id ORDER BY d.last_seen_at DESC
+                """
+            ).fetchall()
+        return [
+            {
+                "id": row["id"],
+                "display_name": row["display_name"],
+                "device_type": row["device_type"],
+                "fingerprint": row["fingerprint"],
+                "last_seen_at": row["last_seen_at"],
+                "config": json.loads(row["config_json"]),
+            }
+            for row in rows
+        ]
+
+    def append_event(
+        self,
+        event_type: str,
+        aggregate_type: str,
+        aggregate_id: str,
+        payload: dict[str, Any],
+    ) -> None:
+        with self.transaction() as connection:
+            self._append_event(connection, event_type, aggregate_type, aggregate_id, payload)
 
     def _append_event(
         self,

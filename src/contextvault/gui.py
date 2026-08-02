@@ -13,6 +13,9 @@ from contextvault.domain import Sensitivity, SourceType
 from contextvault.repository import VaultRepository
 from contextvault.services import ProfileService, claim_to_dict
 from contextvault.vault import initialize
+from contextvault.device_agent import scan_device
+from contextvault.pipeline import ImportPipeline
+from contextvault.sync_service import SyncService
 
 
 STATIC_TYPES = {
@@ -122,6 +125,9 @@ def _handler_for(vault_path: Path) -> type[BaseHTTPRequestHandler]:
             if route == "/api/profile":
                 self._json(service.current_profile("personal"))
                 return
+            if route == "/api/profile/health":
+                self._json(service.health("personal"))
+                return
             if route == "/api/events":
                 self._json(
                     {
@@ -137,6 +143,26 @@ def _handler_for(vault_path: Path) -> type[BaseHTTPRequestHandler]:
                         ]
                     }
                 )
+                return
+            if route == "/api/devices":
+                self._json({"items": repository.list_devices()})
+                return
+            if route == "/api/imports":
+                self._json({"items": repository.list_imports()})
+                return
+            sync_service = SyncService(repository)
+            if route == "/api/routes":
+                self._json({"items": sync_service.list_routes()})
+                return
+            if route == "/api/receipts":
+                self._json({"items": sync_service.list_receipts()})
+                return
+            if route == "/api/privacy":
+                with repository.transaction() as connection:
+                    row = connection.execute(
+                        "SELECT value FROM metadata WHERE key = 'sensitive_sync_enabled'"
+                    ).fetchone()
+                self._json({"sensitive_sync_enabled": bool(row and row[0] == "1")})
                 return
             self._json({"error": "Not found"}, HTTPStatus.NOT_FOUND)
 
@@ -169,6 +195,56 @@ def _handler_for(vault_path: Path) -> type[BaseHTTPRequestHandler]:
                     )
                     self._json({"item": claim_to_dict(claim)}, HTTPStatus.CREATED)
                     return
+                if route == "/api/claims/confirm-all":
+                    items = [claim_to_dict(item) for item in service.confirm_all()]
+                    self._json({"items": items})
+                    return
+                if route == "/api/imports":
+                    result = ImportPipeline(repository).import_chatgpt(
+                        Path(str(body.get("path", ""))),
+                        account_id=(str(body["account_id"]) if body.get("account_id") else None),
+                        space=str(body.get("space", "personal")),
+                    )
+                    self._json({"item": result.__dict__}, HTTPStatus.CREATED)
+                    return
+                if route == "/api/devices/scan":
+                    item = repository.upsert_device_scan(
+                        scan_device(str(body["name"]) if body.get("name") else None)
+                    )
+                    self._json({"item": item}, HTTPStatus.CREATED)
+                    return
+                sync_service = SyncService(repository)
+                if route == "/api/routes":
+                    item = sync_service.add_route(
+                        source_account_id=(
+                            str(body["source_account_id"])
+                            if body.get("source_account_id")
+                            else None
+                        ),
+                        space=str(body.get("space", "personal")),
+                        target_account_id=str(body.get("target_account_id", "")),
+                        policy={
+                            "allowed_categories": [
+                                item.strip()
+                                for item in str(body.get("categories", "*")).split(",")
+                                if item.strip()
+                            ],
+                            "max_sensitivity": str(
+                                body.get("max_sensitivity", "personal")
+                            ),
+                            "sensitive_mode": str(body.get("sensitive_mode", "block")),
+                            "attachment_mode": str(
+                                body.get("attachment_mode", "reference")
+                            ),
+                        },
+                    )
+                    self._json({"item": item}, HTTPStatus.CREATED)
+                    return
+                if route in {"/api/privacy/enable", "/api/privacy/disable"}:
+                    enabled = route.endswith("enable")
+                    sync_service.set_sensitive_sync(enabled)
+                    self._json({"sensitive_sync_enabled": enabled})
+                    return
                 route_parts = route.strip("/").split("/")
                 if len(route_parts) == 4 and route_parts[:2] == ["api", "claims"]:
                     claim_id, action = route_parts[2], route_parts[3]
@@ -177,6 +253,15 @@ def _handler_for(vault_path: Path) -> type[BaseHTTPRequestHandler]:
                         return
                     if action == "reject":
                         self._json({"item": claim_to_dict(service.reject(claim_id))})
+                        return
+                if len(route_parts) == 4 and route_parts[:2] == ["api", "routes"]:
+                    route_id, action = route_parts[2], route_parts[3]
+                    approved = bool(body.get("approve_sensitive", False))
+                    if action == "preview":
+                        self._json({"item": SyncService(repository).preview(route_id, approved).__dict__})
+                        return
+                    if action == "sync":
+                        self._json({"item": SyncService(repository).run(route_id, approved)})
                         return
                 self._json({"error": "Not found"}, HTTPStatus.NOT_FOUND)
             except (ValueError, sqlite3.IntegrityError) as error:

@@ -2,11 +2,13 @@ from __future__ import annotations
 
 import tempfile
 import unittest
+from unittest.mock import patch
 from pathlib import Path
 
 from contextvault.domain import ClaimStatus, Sensitivity
 from contextvault.repository import VaultRepository
 from contextvault.services import ProfileService
+from contextvault.device_agent import _version
 
 
 class RepositoryTests(unittest.TestCase):
@@ -74,6 +76,38 @@ class RepositoryTests(unittest.TestCase):
         self.assertEqual(self.repository.get_cursor("laptop"), 0)
         self.repository.set_cursor("laptop", 12)
         self.assertEqual(self.repository.get_cursor("laptop"), 12)
+
+    def test_device_scan_upserts_and_reports_changes(self) -> None:
+        scan = {
+            "display_name": "Test laptop",
+            "device_type": "computer",
+            "fingerprint": "stable-fingerprint",
+            "config": {"os": "TestOS", "tools": {"python": "3.12"}},
+        }
+        created = self.repository.upsert_device_scan(scan)
+        scan["config"]["tools"]["python"] = "3.13"
+        updated = self.repository.upsert_device_scan(scan)
+
+        self.assertEqual(created["id"], updated["id"])
+        self.assertIn("tools", updated["changes"])
+        self.assertEqual(len(self.repository.list_devices()), 1)
+
+    def test_full_text_search_and_account_lifecycle(self) -> None:
+        account = self.repository.add_account("chatgpt", "Personal")
+        claim = self.service.add_candidate(attribute="project.name", value="ContextVault")
+
+        self.assertEqual(self.repository.search_claims("ContextVault"), [claim])
+        renamed = self.repository.update_account(account.id, label="Work", status="disconnected")
+        self.assertEqual(renamed.account_label, "Work")
+        self.assertEqual(renamed.status, "disconnected")
+
+    @patch("contextvault.device_agent.subprocess.run")
+    @patch("contextvault.device_agent.shutil.which", return_value="/usr/bin/tool")
+    def test_failed_tool_probe_is_not_reported(self, _which, run) -> None:
+        run.return_value.returncode = 1
+        run.return_value.stdout = ""
+        run.return_value.stderr = "tool is unavailable"
+        self.assertIsNone(_version(["tool", "--version"]))
 
 
 if __name__ == "__main__":

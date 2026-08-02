@@ -6,7 +6,7 @@ from pathlib import Path
 from datetime import datetime, timezone
 
 
-SCHEMA_VERSION = 5
+SCHEMA_VERSION = 7
 
 
 @dataclass(frozen=True)
@@ -136,6 +136,7 @@ def initialize(path: Path) -> VaultStatus:
             CREATE TABLE IF NOT EXISTS sync_receipts (
                 id TEXT PRIMARY KEY,
                 target_id TEXT NOT NULL REFERENCES sync_targets(id) ON DELETE CASCADE,
+                route_id TEXT REFERENCES sync_routes(id) ON DELETE SET NULL,
                 profile_version TEXT NOT NULL,
                 manifest_json TEXT NOT NULL,
                 status TEXT NOT NULL,
@@ -192,6 +193,45 @@ def initialize(path: Path) -> VaultStatus:
                 updated_at TEXT NOT NULL
             );
 
+            CREATE TABLE IF NOT EXISTS source_imports (
+                id TEXT PRIMARY KEY,
+                source_type TEXT NOT NULL,
+                account_id TEXT REFERENCES provider_accounts(id) ON DELETE SET NULL,
+                source_name TEXT NOT NULL,
+                source_hash TEXT NOT NULL UNIQUE,
+                conversation_count INTEGER NOT NULL DEFAULT 0,
+                message_count INTEGER NOT NULL DEFAULT 0,
+                status TEXT NOT NULL,
+                created_at TEXT NOT NULL,
+                completed_at TEXT
+            );
+
+            CREATE TABLE IF NOT EXISTS evidence_messages (
+                id TEXT PRIMARY KEY,
+                import_id TEXT NOT NULL REFERENCES source_imports(id) ON DELETE CASCADE,
+                account_id TEXT REFERENCES provider_accounts(id) ON DELETE SET NULL,
+                conversation_id TEXT NOT NULL,
+                conversation_title TEXT,
+                provider_message_id TEXT,
+                role TEXT NOT NULL,
+                content TEXT NOT NULL,
+                content_hash TEXT NOT NULL,
+                created_at TEXT,
+                imported_at TEXT NOT NULL,
+                UNIQUE(import_id, conversation_id, provider_message_id, content_hash)
+            );
+
+            CREATE TABLE IF NOT EXISTS generated_summaries (
+                id TEXT PRIMARY KEY,
+                space_id TEXT NOT NULL REFERENCES profile_spaces(id) ON DELETE CASCADE,
+                target_id TEXT REFERENCES sync_targets(id) ON DELETE SET NULL,
+                summary_type TEXT NOT NULL,
+                version TEXT NOT NULL,
+                content TEXT NOT NULL,
+                manifest_json TEXT NOT NULL,
+                created_at TEXT NOT NULL
+            );
+
             CREATE VIRTUAL TABLE IF NOT EXISTS claims_fts USING fts5(
                 claim_id UNINDEXED,
                 attribute,
@@ -221,7 +261,17 @@ def initialize(path: Path) -> VaultStatus:
                 ON sync_events(device_id, sequence);
             CREATE INDEX IF NOT EXISTS attachment_refs_account_status_idx
                 ON attachment_refs(account_id, status);
+            CREATE INDEX IF NOT EXISTS evidence_messages_import_role_idx
+                ON evidence_messages(import_id, role);
+            CREATE INDEX IF NOT EXISTS generated_summaries_space_created_idx
+                ON generated_summaries(space_id, created_at DESC);
             """
+        )
+        _ensure_column(
+            connection,
+            "sync_receipts",
+            "route_id",
+            "TEXT REFERENCES sync_routes(id) ON DELETE SET NULL",
         )
         connection.execute(
             "INSERT OR REPLACE INTO metadata(key, value) VALUES (?, ?)",
@@ -285,3 +335,11 @@ def status(path: Path) -> VaultStatus:
         int(attachment_row[0]),
         int(event_row[0]),
     )
+
+
+def _ensure_column(
+    connection: sqlite3.Connection, table: str, column: str, declaration: str
+) -> None:
+    columns = {row[1] for row in connection.execute(f"PRAGMA table_info({table})")}
+    if column not in columns:
+        connection.execute(f"ALTER TABLE {table} ADD COLUMN {column} {declaration}")

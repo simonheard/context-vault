@@ -64,6 +64,27 @@ class ProfileService:
     def reject(self, claim_id: str) -> Claim:
         return self.repository.transition_claim(claim_id, ClaimStatus.REJECTED)
 
+    def confirm_all(self, space: Optional[str] = None) -> list[Claim]:
+        return [self.confirm(claim.id) for claim in self.candidates(space)]
+
+    def health(self, space: str = "personal") -> dict[str, Any]:
+        claims = self.repository.list_claims(space=space, limit=1000)
+        counts = {status.value: 0 for status in ClaimStatus}
+        for claim in claims:
+            counts[claim.status.value] += 1
+        confirmed = counts[ClaimStatus.CONFIRMED.value]
+        sourced = sum(bool(self.repository.claim_sources(claim.id)) for claim in claims)
+        score = 100 if not claims else round(
+            100 * (0.6 * confirmed / len(claims) + 0.4 * sourced / len(claims))
+        )
+        return {
+            "space": space,
+            "score": score,
+            "counts": counts,
+            "without_source": len(claims) - sourced,
+            "needs_review": counts["candidate"] + counts["conflicted"],
+        }
+
     def candidates(self, space: Optional[str] = None) -> list[Claim]:
         return self.repository.list_claims(status=ClaimStatus.CANDIDATE, space=space)
 

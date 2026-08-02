@@ -114,8 +114,29 @@ class SyncServiceTests(unittest.TestCase):
         self.assertEqual(failed["status"], "failed")
         self.assertEqual(len(self.sync.automation_jobs()), 1)
         retry = self.sync.run_automation(route["id"])
+        self.sync.begin_dispatch(retry["id"])
+        self.assertEqual(self.sync.automation_jobs(), [])
+        self.sync.mark_send_attempted(retry["id"])
+        with self.assertRaisesRegex(ValueError, "possible send"):
+            self.sync.fail_receipt(retry["id"], "ack connection failed")
         self.sync.acknowledge(retry["id"])
         self.assertEqual(self.sync.automation_jobs(), [])
+
+    def test_automation_circuit_breaker_requires_explicit_reenable(self) -> None:
+        claim = self.profile.add_candidate(attribute="identity.name", value="Simon")
+        self.profile.confirm(claim.id)
+        route = self.sync.add_route(
+            source_account_id=self.source.id,
+            space="personal",
+            target_account_id=self.target.id,
+        )
+        self.sync.configure_automation(route["id"], enabled=True, risk_acknowledged=True)
+        for _ in range(3):
+            state = self.sync.record_automation_failure(route["id"], "selector missing")
+        self.assertEqual(state["paused_reason"], "three_consecutive_adapter_failures")
+        self.assertEqual(self.sync.automation_jobs(), [])
+        self.sync.configure_automation(route["id"], enabled=True, risk_acknowledged=True)
+        self.assertEqual(len(self.sync.automation_jobs()), 1)
 
 
 if __name__ == "__main__":

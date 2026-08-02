@@ -20,6 +20,8 @@ from contextvault.sync_service import SyncService
 from contextvault.providers import PROVIDERS, provider_capabilities
 from contextvault.cli_adapters import CLI_TOOLS, CliAdapterService
 from contextvault.daemon_service import daemon_status, install_daemon, uninstall_daemon
+from contextvault.summary_engines import SummaryEngineService
+from contextvault.capture_service import CaptureService
 
 
 DEFAULT_VAULT = Path(".contextvault/vault.sqlite")
@@ -201,6 +203,30 @@ def build_parser() -> argparse.ArgumentParser:
         "--type", choices=["personal", "full", "work", "project", "devices", "recent"], required=True
     )
     summary_parser.add_argument("--space", default="personal")
+    summary_parser.add_argument(
+        "--engine",
+        choices=["deterministic", "ollama", "lmstudio", "openai-compatible", "codex-cli", "claude-code"],
+        default="deterministic",
+    )
+    summary_parser.add_argument("--model")
+    summary_parser.add_argument("--base-url")
+    summary_parser.add_argument("--api-key-env")
+    summary_parser.add_argument("--allow-cloud", action="store_true")
+    summary_parser.add_argument("--max-chars", type=int, default=12000)
+
+    models_parser = subparsers.add_parser("models", help="detect optional local and signed-in summary engines")
+    models_parser.add_argument("detect", nargs="?")
+
+    captures_parser = subparsers.add_parser("captures", help="manage automatic conversation capture")
+    capture_commands = captures_parser.add_subparsers(dest="capture_command", required=True)
+    capture_commands.add_parser("list", help="list configured browser capture sources")
+    capture_enable = capture_commands.add_parser("enable", help="enable capture for a provider account")
+    capture_enable.add_argument("account_id")
+    capture_enable.add_argument("--interval", type=int, default=15)
+    capture_enable.add_argument("--conversation-url")
+    capture_enable.add_argument("--acknowledge-privacy-risk", action="store_true")
+    capture_disable = capture_commands.add_parser("disable", help="disable capture for a provider account")
+    capture_disable.add_argument("account_id")
 
     extension_parser = subparsers.add_parser(
         "extension", help="pair the user-side browser extension"
@@ -360,7 +386,36 @@ def main(argv: list[str] | None = None) -> int:
             print(json.dumps(result, ensure_ascii=False, indent=2))
             return 0
         if args.command == "summary":
-            print(SummaryService(VaultRepository(args.vault)).render(args.type, args.space))
+            result = SummaryEngineService(VaultRepository(args.vault)).generate(
+                engine=args.engine,
+                summary_type=args.type,
+                space=args.space,
+                model=args.model,
+                base_url=args.base_url,
+                api_key_env=args.api_key_env,
+                allow_cloud=args.allow_cloud,
+                max_chars=args.max_chars,
+            )
+            print(result["content"])
+            return 0
+        if args.command == "models":
+            print(json.dumps(SummaryEngineService(VaultRepository(args.vault)).detect(), ensure_ascii=False, indent=2))
+            return 0
+        if args.command == "captures":
+            service = CaptureService(VaultRepository(args.vault))
+            if args.capture_command == "list":
+                result = service.list()
+            elif args.capture_command == "enable":
+                result = service.configure(
+                    args.account_id,
+                    enabled=True,
+                    interval_minutes=args.interval,
+                    risk_acknowledged=args.acknowledge_privacy_risk,
+                    conversation_url=args.conversation_url,
+                )
+            else:
+                result = service.configure(args.account_id, enabled=False)
+            print(json.dumps(result, ensure_ascii=False, indent=2))
             return 0
         if args.command == "extension":
             repository = VaultRepository(args.vault)

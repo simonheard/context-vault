@@ -7,7 +7,7 @@ from pathlib import Path
 from datetime import datetime, timezone
 
 
-SCHEMA_VERSION = 8
+SCHEMA_VERSION = 9
 
 
 @dataclass(frozen=True)
@@ -142,7 +142,10 @@ def initialize(path: Path) -> VaultStatus:
                 manifest_json TEXT NOT NULL,
                 status TEXT NOT NULL,
                 created_at TEXT NOT NULL,
-                completed_at TEXT
+                completed_at TEXT,
+                dispatch_started_at TEXT,
+                send_attempted_at TEXT,
+                failure_reason TEXT
             );
 
             CREATE TABLE IF NOT EXISTS consent_receipts (
@@ -231,6 +234,10 @@ def initialize(path: Path) -> VaultStatus:
                 version TEXT NOT NULL,
                 content TEXT NOT NULL,
                 manifest_json TEXT NOT NULL,
+                engine TEXT NOT NULL DEFAULT 'deterministic',
+                model TEXT,
+                prompt_version TEXT NOT NULL DEFAULT '1',
+                input_hash TEXT,
                 created_at TEXT NOT NULL
             );
 
@@ -254,7 +261,30 @@ def initialize(path: Path) -> VaultStatus:
                 client_version TEXT NOT NULL,
                 protocol_version INTEGER NOT NULL,
                 status TEXT NOT NULL,
+                token_hash TEXT,
                 last_seen_at TEXT NOT NULL
+            );
+
+            CREATE TABLE IF NOT EXISTS capture_sources (
+                id TEXT PRIMARY KEY,
+                account_id TEXT NOT NULL UNIQUE REFERENCES provider_accounts(id) ON DELETE CASCADE,
+                enabled INTEGER NOT NULL DEFAULT 0 CHECK (enabled IN (0, 1)),
+                interval_minutes INTEGER NOT NULL DEFAULT 15,
+                risk_acknowledged_at TEXT,
+                conversation_url TEXT,
+                last_captured_at TEXT,
+                consecutive_failures INTEGER NOT NULL DEFAULT 0,
+                paused_reason TEXT,
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL
+            );
+
+            CREATE TABLE IF NOT EXISTS automation_route_state (
+                route_id TEXT PRIMARY KEY REFERENCES sync_routes(id) ON DELETE CASCADE,
+                consecutive_failures INTEGER NOT NULL DEFAULT 0,
+                paused_reason TEXT,
+                last_error TEXT,
+                updated_at TEXT NOT NULL
             );
 
             CREATE VIRTUAL TABLE IF NOT EXISTS claims_fts USING fts5(
@@ -298,6 +328,16 @@ def initialize(path: Path) -> VaultStatus:
             "route_id",
             "TEXT REFERENCES sync_routes(id) ON DELETE SET NULL",
         )
+        _ensure_column(connection, "sync_receipts", "dispatch_started_at", "TEXT")
+        _ensure_column(connection, "sync_receipts", "send_attempted_at", "TEXT")
+        _ensure_column(connection, "sync_receipts", "failure_reason", "TEXT")
+        _ensure_column(connection, "sync_clients", "token_hash", "TEXT")
+        _ensure_column(connection, "generated_summaries", "engine", "TEXT NOT NULL DEFAULT 'deterministic'")
+        _ensure_column(connection, "generated_summaries", "model", "TEXT")
+        _ensure_column(connection, "generated_summaries", "prompt_version", "TEXT NOT NULL DEFAULT '1'")
+        _ensure_column(connection, "generated_summaries", "input_hash", "TEXT")
+        _ensure_column(connection, "capture_sources", "consecutive_failures", "INTEGER NOT NULL DEFAULT 0")
+        _ensure_column(connection, "capture_sources", "paused_reason", "TEXT")
         _ensure_column(
             connection,
             "sync_events",
@@ -313,7 +353,10 @@ def initialize(path: Path) -> VaultStatus:
             ("extension_pairing_token", secrets.token_urlsafe(32)),
         )
         connection.execute(
-            "INSERT OR REPLACE INTO metadata(key, value) VALUES ('protocol_version', '2')"
+            "INSERT OR REPLACE INTO metadata(key, value) VALUES ('protocol_version', '3')"
+        )
+        connection.execute(
+            "INSERT OR IGNORE INTO metadata(key, value) VALUES ('at_rest_protection', 'operating_system_disk_encryption')"
         )
         now = datetime.now(timezone.utc).isoformat()
         connection.execute(

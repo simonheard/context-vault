@@ -33,8 +33,13 @@ class MigrationTests(unittest.TestCase):
                 columns = {
                     row[1] for row in connection.execute("PRAGMA table_info(sync_receipts)")
                 }
-            self.assertEqual(result.schema_version, 8)
+            self.assertEqual(result.schema_version, 9)
             self.assertIn("route_id", columns)
+            self.assertIn("dispatch_started_at", columns)
+            self.assertIn("send_attempted_at", columns)
+            with sqlite3.connect(path) as connection:
+                tables = {row[0] for row in connection.execute("SELECT name FROM sqlite_master WHERE type = 'table'")}
+            self.assertIn("capture_sources", tables)
 
 
 if __name__ == "__main__":

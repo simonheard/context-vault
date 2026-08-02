@@ -9,7 +9,7 @@
 - Gemini CLI: project `GEMINI.md`, global `~/.gemini/GEMINI.md`;
 - Cursor, GitHub Copilot, Cline, Windsurf, Aider, and OpenCode.
 
-ContextVault writes an HTML-comment-delimited managed block. Updates replace only that block and preserve existing project rules. Older protocol-1 blocks are upgraded in place to protocol 2 instead of duplicated. Project scope is the default; user-directory files are touched only with explicit `--scope global`.
+ContextVault writes an HTML-comment-delimited managed block. Updates replace only that block and preserve existing project rules. Older protocol-1/2 blocks are upgraded in place to protocol 3 instead of duplicated. Project scope is the default; user-directory files are touched only with explicit `--scope global`.
 
 ```bash
 contextvault cli list

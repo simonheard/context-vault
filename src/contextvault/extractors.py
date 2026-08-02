@@ -37,11 +37,16 @@ _PATTERNS: list[tuple[str, re.Pattern[str], float, Sensitivity]] = [
 ]
 
 
-def extract_profile_candidates(messages: Iterable[dict[str, object]]) -> list[ExtractedCandidate]:
+def extract_profile_candidates(
+    messages: Iterable[dict[str, object]],
+    *,
+    roles: set[str] | None = None,
+    confidence_scale: float = 1.0,
+) -> list[ExtractedCandidate]:
     candidates: list[ExtractedCandidate] = []
     seen: set[tuple[str, str, str]] = set()
     for message in messages:
-        if message.get("role") != "user":
+        if str(message.get("role")) not in (roles or {"user"}):
             continue
         content = str(message.get("content") or "")
         if find_secrets(content):
@@ -57,7 +62,7 @@ def extract_profile_candidates(messages: Iterable[dict[str, object]]) -> list[Ex
                     ExtractedCandidate(
                         attribute=attribute,
                         value=value,
-                        confidence=confidence,
+                        confidence=min(confidence * confidence_scale, 1.0),
                         sensitivity=sensitivity,
                         conversation_id=str(message.get("conversation_id") or ""),
                         message_id=str(message.get("provider_message_id") or ""),

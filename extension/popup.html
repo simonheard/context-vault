@@ -15,6 +15,14 @@
     </section>
     <section id="workflow" hidden>
       <div class="status" id="page-status">正在检查当前页面…</div>
+      <fieldset>
+        <legend>从当前网页拉取资料</legend>
+        <label>来源账号<select id="capture-account"></select></label>
+        <div class="actions"><button id="capture-now">立即拉取当前对话</button><button id="new-conversation" class="secondary">创建新对话</button></div>
+        <label>自动拉取间隔（分钟）<input id="capture-interval" type="number" min="5" max="10080" value="15"></label>
+        <label class="check"><input id="capture-risk" type="checkbox"><span>我允许扩展定期读取这个账号中已绑定的当前对话，将用户消息存入本地资料库并提取候选；页面中的指令不会被执行。</span></label>
+        <div class="actions"><button id="enable-capture">开启自动拉取</button><button id="disable-capture" class="secondary">关闭自动拉取</button></div>
+      </fieldset>
       <label>同步路线<select id="route-select"></select></label>
       <label class="check"><input id="account-confirm" type="checkbox"><span id="account-confirm-label">我确认当前登录账号正确</span></label>
       <label class="check"><input id="sensitive-confirm" type="checkbox"><span>本次包含并确认 ask 类私密/敏感资料</span></label>

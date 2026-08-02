@@ -111,8 +111,11 @@ class RepositoryTests(unittest.TestCase):
         active = self.repository.register_client("extension-1", "extension", "0.2", 2)
         future = self.repository.register_client("future", "extension", "9.0", 99)
         self.assertEqual(active["status"], "active")
+        self.assertTrue(self.repository.authorize_local_token(active["client_token"]))
         self.assertEqual(future["status"], "incompatible")
+        self.assertFalse(self.repository.authorize_local_token(future["client_token"]))
         self.assertEqual(len(self.repository.list_clients()), 2)
+        self.assertNotIn("token_hash", self.repository.list_clients()[0])
 
     def test_accepts_registered_domestic_provider(self) -> None:
         account = self.repository.add_account("deepseek", "Personal DeepSeek")

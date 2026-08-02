@@ -16,6 +16,7 @@ from contextvault.services import ProfileService, claim_to_dict
 from contextvault.vault import initialize
 from contextvault.device_agent import scan_device
 from contextvault.pipeline import ImportPipeline
+from contextvault.capture_service import CaptureService
 from contextvault.sync_service import SyncService
 from contextvault.providers import provider_capabilities
 from contextvault.protocol import (
@@ -25,6 +26,7 @@ from contextvault.protocol import (
 )
 from contextvault import __version__
 from contextvault.vault import SCHEMA_VERSION
+from contextvault.summary_engines import SummaryEngineService
 
 
 STATIC_TYPES = {
@@ -125,7 +127,7 @@ def _handler_for(vault_path: Path) -> type[BaseHTTPRequestHandler]:
             parsed = urlparse(self.path)
             route = parsed.path
             if route.startswith("/api/") and not self._authorized():
-                self._json({"error": "Extension pairing token is invalid"}, HTTPStatus.FORBIDDEN)
+                self._json({"error": "Local API request is not authorized"}, HTTPStatus.FORBIDDEN)
                 return
             if not self._protocol_allowed(route):
                 self._protocol_error()
@@ -196,6 +198,9 @@ def _handler_for(vault_path: Path) -> type[BaseHTTPRequestHandler]:
             if route == "/api/providers":
                 self._json({"items": provider_capabilities()})
                 return
+            if route == "/api/models":
+                self._json({"items": SummaryEngineService(repository).detect()})
+                return
             if route == "/api/version":
                 self._json(
                     {
@@ -209,6 +214,12 @@ def _handler_for(vault_path: Path) -> type[BaseHTTPRequestHandler]:
             if route == "/api/automation/jobs":
                 self._json({"items": SyncService(repository).automation_jobs()})
                 return
+            if route == "/api/capture/jobs":
+                self._json({"items": CaptureService(repository).jobs()})
+                return
+            if route == "/api/captures":
+                self._json({"items": CaptureService(repository).list()})
+                return
             if route == "/api/extension/pairing":
                 self._json({"token": repository.extension_pairing_token()})
                 return
@@ -217,7 +228,7 @@ def _handler_for(vault_path: Path) -> type[BaseHTTPRequestHandler]:
         def do_POST(self) -> None:  # noqa: N802
             route = urlparse(self.path).path
             if route.startswith("/api/") and not self._authorized():
-                self._json({"error": "Extension pairing token is invalid"}, HTTPStatus.FORBIDDEN)
+                self._json({"error": "Local API request is not authorized"}, HTTPStatus.FORBIDDEN)
                 return
             if not self._protocol_allowed(route):
                 self._protocol_error()
@@ -324,6 +335,31 @@ def _handler_for(vault_path: Path) -> type[BaseHTTPRequestHandler]:
                     )
                     self._json({"item": item}, HTTPStatus.CREATED)
                     return
+                if route == "/api/captures/ingest":
+                    item = CaptureService(repository).ingest(
+                        str(body.get("account_id", "")),
+                        provider=str(body.get("provider", "")),
+                        conversation_url=str(body.get("conversation_url", "")),
+                        title=str(body.get("title", "Captured conversation")),
+                        messages=list(body.get("messages", [])),
+                        space=str(body.get("space", "personal")),
+                        knowledge_probe=bool(body.get("knowledge_probe", False)),
+                    )
+                    self._json({"item": item}, HTTPStatus.CREATED)
+                    return
+                if route == "/api/summaries/generate":
+                    item = SummaryEngineService(repository).generate(
+                        engine=str(body.get("engine", "deterministic")),
+                        summary_type=str(body.get("summary_type", "personal")),
+                        space=str(body.get("space", "personal")),
+                        model=(str(body["model"]) if body.get("model") else None),
+                        base_url=(str(body["base_url"]) if body.get("base_url") else None),
+                        api_key_env=(str(body["api_key_env"]) if body.get("api_key_env") else None),
+                        allow_cloud=bool(body.get("allow_cloud", False)),
+                        max_chars=int(body.get("max_chars", 12000)),
+                    )
+                    self._json({"item": item}, HTTPStatus.CREATED)
+                    return
                 route_parts = route.strip("/").split("/")
                 if len(route_parts) == 4 and route_parts[:2] == ["api", "claims"]:
                     claim_id, action = route_parts[2], route_parts[3]
@@ -361,6 +397,42 @@ def _handler_for(vault_path: Path) -> type[BaseHTTPRequestHandler]:
                             {"item": SyncService(repository).run_automation(route_id)}
                         )
                         return
+                    if action == "binding":
+                        self._json(
+                            {
+                                "item": SyncService(repository).bind_browser_context(
+                                    route_id,
+                                    conversation_url=str(body.get("conversation_url", "")),
+                                    account_fingerprint=(str(body["account_fingerprint"]) if body.get("account_fingerprint") else None),
+                                )
+                            }
+                        )
+                        return
+                    if action == "automation-failure":
+                        self._json(
+                            {"item": SyncService(repository).record_automation_failure(route_id, str(body.get("reason", "adapter_failed")))}
+                        )
+                        return
+                if len(route_parts) == 4 and route_parts[:2] == ["api", "accounts"]:
+                    account_id, action = route_parts[2], route_parts[3]
+                    if action == "capture":
+                        self._json(
+                            {
+                                "item": CaptureService(repository).configure(
+                                    account_id,
+                                    enabled=bool(body.get("enabled", False)),
+                                    interval_minutes=int(body.get("interval_minutes", 15)),
+                                    risk_acknowledged=bool(body.get("risk_acknowledged", False)),
+                                    conversation_url=(str(body["conversation_url"]) if body.get("conversation_url") else None),
+                                )
+                            }
+                        )
+                        return
+                    if action == "capture-failure":
+                        self._json(
+                            {"item": CaptureService(repository).record_failure(account_id, str(body.get("reason", "adapter_failed")))}
+                        )
+                        return
                 if len(route_parts) == 4 and route_parts[:2] == ["api", "receipts"]:
                     receipt_id, action = route_parts[2], route_parts[3]
                     if action == "acknowledge":
@@ -377,6 +449,12 @@ def _handler_for(vault_path: Path) -> type[BaseHTTPRequestHandler]:
                             }
                         )
                         return
+                    if action == "dispatch":
+                        self._json({"item": SyncService(repository).begin_dispatch(receipt_id)})
+                        return
+                    if action == "attempted":
+                        self._json({"item": SyncService(repository).mark_send_attempted(receipt_id)})
+                        return
                 self._json({"error": "Not found"}, HTTPStatus.NOT_FOUND)
             except (ValueError, sqlite3.IntegrityError) as error:
                 self._json({"error": str(error)}, HTTPStatus.BAD_REQUEST)
@@ -385,6 +463,9 @@ def _handler_for(vault_path: Path) -> type[BaseHTTPRequestHandler]:
             return
 
         def _read_json(self) -> dict[str, Any]:
+            content_type = self.headers.get("Content-Type", "").split(";", 1)[0].strip().lower()
+            if content_type != "application/json":
+                raise ValueError("POST requests must use application/json")
             length = int(self.headers.get("Content-Length", "0"))
             if length > 64_000:
                 raise ValueError("Request body is too large")
@@ -423,12 +504,19 @@ def _handler_for(vault_path: Path) -> type[BaseHTTPRequestHandler]:
             return origin if origin.startswith("chrome-extension://") else None
 
         def _authorized(self) -> bool:
-            if not self._extension_origin():
-                return True
             supplied = self.headers.get("X-ContextVault-Token", "")
-            expected = VaultRepository(vault_path).extension_pairing_token()
-            return extension_request_authorized(
-                self._extension_origin(), supplied, expected
+            repository = VaultRepository(vault_path)
+            expected = repository.extension_pairing_token()
+            origin = self.headers.get("Origin")
+            if origin and origin.startswith("chrome-extension://"):
+                if not repository.authorize_local_token(supplied):
+                    return False
+                supplied = expected
+            return request_authorized(
+                origin,
+                self.headers.get("Host", ""),
+                supplied,
+                expected,
             )
 
         def _cors_headers(self) -> None:
@@ -471,3 +559,31 @@ def extension_request_authorized(
     if not origin.startswith("chrome-extension://"):
         return False
     return bool(supplied_token) and hmac.compare_digest(supplied_token, expected_token)
+
+
+def request_authorized(
+    origin: str | None,
+    host: str,
+    supplied_token: str,
+    expected_token: str,
+) -> bool:
+    """Reject DNS rebinding and browser cross-site requests to the loopback API."""
+    try:
+        host_name = urlparse(f"//{host}").hostname
+    except ValueError:
+        return False
+    if host_name not in {"127.0.0.1", "localhost", "::1"}:
+        return False
+    if not origin:
+        return True  # native CLI and local diagnostics do not send Origin
+    if origin.startswith("chrome-extension://"):
+        return extension_request_authorized(origin, supplied_token, expected_token)
+    try:
+        parsed = urlparse(origin)
+    except ValueError:
+        return False
+    return (
+        parsed.scheme == "http"
+        and parsed.hostname in {"127.0.0.1", "localhost", "::1"}
+        and parsed.netloc == host
+    )

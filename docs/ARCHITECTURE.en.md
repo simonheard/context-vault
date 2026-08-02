@@ -149,7 +149,7 @@ In order of stability:
 1. Official API or import format.
 2. User-triggered file import.
 3. One-click copy of structured profile data.
-4. Browser injection on a page where the user is already signed in.
+4. Browser capture, dedicated-chat creation, or injection on a page where the user is already signed in.
 5. Never store cookies on a server to impersonate the user.
 
 ## Attachment handling

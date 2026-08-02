@@ -15,6 +15,8 @@ class ProviderCapability:
     automatic_send: bool = True
     file_import: bool = False
     attachment_transfer: bool = False
+    conversation_capture: bool = True
+    maturity: str = "experimental"
     notes: str = "Uses the user's logged-in browser session."
 
 
@@ -27,6 +29,7 @@ def _provider(
     region: str = "global",
     file_import: bool = False,
     automatic_send: bool = True,
+    maturity: str = "experimental",
 ) -> ProviderCapability:
     return ProviderCapability(
         id=provider_id,
@@ -36,21 +39,22 @@ def _provider(
         region=region,
         file_import=file_import,
         automatic_send=automatic_send,
+        maturity=maturity,
     )
 
 
 PROVIDERS = {
     item.id: item
     for item in (
-        _provider("chatgpt", "ChatGPT", ("chatgpt.com", "chat.openai.com"), "https://chatgpt.com/", file_import=True),
-        _provider("gemini", "Gemini", ("gemini.google.com",), "https://gemini.google.com/app"),
-        _provider("claude", "Claude", ("claude.ai",), "https://claude.ai/new"),
+        _provider("chatgpt", "ChatGPT", ("chatgpt.com", "chat.openai.com"), "https://chatgpt.com/", file_import=True, maturity="beta"),
+        _provider("gemini", "Gemini", ("gemini.google.com",), "https://gemini.google.com/app", maturity="beta"),
+        _provider("claude", "Claude", ("claude.ai",), "https://claude.ai/new", maturity="beta"),
         _provider("perplexity", "Perplexity", ("www.perplexity.ai", "perplexity.ai"), "https://www.perplexity.ai/"),
         _provider("copilot", "Microsoft Copilot", ("copilot.microsoft.com",), "https://copilot.microsoft.com/"),
         _provider("grok", "Grok", ("grok.com",), "https://grok.com/"),
         _provider("mistral", "Le Chat", ("chat.mistral.ai",), "https://chat.mistral.ai/chat"),
         _provider("poe", "Poe", ("poe.com",), "https://poe.com/"),
-        _provider("deepseek", "DeepSeek", ("chat.deepseek.com",), "https://chat.deepseek.com/", region="china"),
+        _provider("deepseek", "DeepSeek", ("chat.deepseek.com",), "https://chat.deepseek.com/", region="china", maturity="beta"),
         _provider("kimi", "Kimi", ("www.kimi.com", "kimi.com", "kimi.moonshot.cn"), "https://www.kimi.com/", region="china"),
         _provider("qwen", "通义千问 / Qwen", ("www.qianwen.com", "qianwen.com", "tongyi.aliyun.com", "chat.qwen.ai"), "https://www.qianwen.com/", region="china"),
         _provider("doubao", "豆包", ("www.doubao.com", "doubao.com"), "https://www.doubao.com/chat/", region="china"),

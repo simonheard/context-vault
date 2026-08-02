@@ -10,6 +10,7 @@ from contextvault.gui import (
     dashboard_snapshot,
     list_rows,
     extension_request_authorized,
+    request_authorized,
 )
 from contextvault.vault import initialize
 
@@ -43,6 +44,13 @@ class GuiDataTests(unittest.TestCase):
         self.assertTrue(extension_request_authorized(origin, "secret", "secret"))
         self.assertFalse(extension_request_authorized(origin, "wrong", "secret"))
         self.assertFalse(extension_request_authorized("https://example.com", "secret", "secret"))
+
+    def test_loopback_api_rejects_cross_site_and_dns_rebinding(self) -> None:
+        self.assertTrue(request_authorized(None, "127.0.0.1:8787", "", "secret"))
+        self.assertTrue(request_authorized("http://127.0.0.1:8787", "127.0.0.1:8787", "", "secret"))
+        self.assertFalse(request_authorized("https://evil.example", "127.0.0.1:8787", "", "secret"))
+        self.assertFalse(request_authorized(None, "evil.example:8787", "", "secret"))
+        self.assertTrue(request_authorized("chrome-extension://abc", "localhost:8787", "secret", "secret"))
 
 
 if __name__ == "__main__":

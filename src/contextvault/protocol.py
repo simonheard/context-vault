@@ -5,8 +5,8 @@ from dataclasses import dataclass
 from contextvault import __version__
 
 
-PROTOCOL_VERSION = 2
-MIN_PROTOCOL_VERSION = 1
+PROTOCOL_VERSION = 3
+MIN_PROTOCOL_VERSION = 2
 
 
 @dataclass(frozen=True)

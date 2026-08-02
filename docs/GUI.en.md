@@ -6,7 +6,8 @@
 
 The dashboard is the primary control surface for an ordinary user, not a server
 administrator console. It binds to `127.0.0.1` by default, reads the local vault,
-and is not deployed publicly.
+and is not deployed publicly. SQLite is not currently application-layer encrypted;
+at-rest protection relies on operating-system disk encryption.
 
 ## Current runnable prototype
 

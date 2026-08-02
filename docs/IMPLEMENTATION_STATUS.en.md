@@ -2,7 +2,7 @@
 
 [中文](IMPLEMENTATION_STATUS.md)
 
-## v0.9 automation, CLI adapters, and compatibility protocol
+## v0.10 bidirectional automation, summary engines, and safe recovery
 
 The following capabilities now run through the CLI or local management UI:
 
@@ -22,14 +22,17 @@ The following capabilities now run through the CLI or local management UI:
 - support review-and-fill plus explicitly acknowledged, scheduled full automation with safe button probing and failure retries;
 - install project or global managed profile blocks for nine coding agents, including Codex, Claude Code, and Gemini CLI;
 - generate macOS LaunchAgent, Linux systemd user, and Windows Task Scheduler definitions;
-- negotiate protocol 2 / schema 8 compatibility, register clients, and upgrade CLI managed blocks in place.
+- negotiate protocol 3 / schema 9, issue per-client tokens, and reject invalid Origin, Host, content type, and DNS-rebinding requests;
+- pull current chats, create blank-page knowledge probes, retain low-confidence candidates, bind dedicated push chats, and trip a three-failure circuit breaker;
+- preserve `dispatching` and `sent_unconfirmed` states plus page markers across restarts to prevent duplicate sends;
+- provide deterministic, Ollama, LM Studio, OpenAI-compatible, Codex CLI, and Claude Code summary engines.
 
 ## Capabilities requiring an external platform or deployed infrastructure
 
 The following cannot be completed by a local repository without target-platform authorization, a logged-in browser session, or a sync server:
 
 - official provider APIs, file upload, verified remote deletion, and post-sync question validation;
-- user-approved incremental capture of new conversations (the current extension writes but does not scrape history);
+- bulk reading of a provider's complete history list (current capture is limited to an explicitly bound chat or official export);
 - interactive attachment download and transfer between logged-in provider accounts;
 - a multi-device end-to-end encrypted server, key recovery, and device revocation (event cursors and protocol boundaries are implemented locally);
 - optional local LLM and calendar, contacts, repository, or smart-home connectors.
@@ -55,5 +58,7 @@ contextvault routes automation <route-id> --mode full --interval 60 --acknowledg
 contextvault cli install codex --scope project
 contextvault cli sync
 contextvault daemon install
+contextvault models detect
+contextvault captures enable <account-id> --acknowledge-privacy-risk
 contextvault ui
 ```

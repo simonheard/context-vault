@@ -6,9 +6,11 @@ from datetime import datetime, timezone
 from dataclasses import dataclass
 from typing import Any, Optional
 from uuid import uuid4
+from urllib.parse import urlparse
 
 from contextvault.domain import Claim, ClaimStatus, Sensitivity, utc_now
 from contextvault.repository import VaultRepository
+from contextvault.providers import PROVIDERS
 
 
 _SENSITIVITY_RANK = {
@@ -32,6 +34,9 @@ DEFAULT_POLICY: dict[str, Any] = {
     "automation_mode": "manual",
     "automation_interval_minutes": 60,
     "automation_risk_acknowledged_at": None,
+    "conversation_url": None,
+    "account_fingerprint": None,
+    "create_new_conversation": True,
 }
 
 
@@ -167,6 +172,15 @@ class SyncService:
                 "UPDATE sync_routes SET policy_json = ?, updated_at = ? WHERE id = ?",
                 (json.dumps(policy, sort_keys=True), utc_now(), route_id),
             )
+            connection.execute(
+                """
+                INSERT INTO automation_route_state(route_id, consecutive_failures, paused_reason, last_error, updated_at)
+                VALUES (?, 0, NULL, NULL, ?)
+                ON CONFLICT(route_id) DO UPDATE SET consecutive_failures = 0, paused_reason = NULL,
+                    last_error = NULL, updated_at = excluded.updated_at
+                """,
+                (route_id, utc_now()),
+            )
         self.repository.append_event(
             "route.automation_changed",
             "sync_route",
@@ -183,11 +197,18 @@ class SyncService:
             policy = _validate_policy(route["policy"])
             if policy["automation_mode"] != "full" or not policy["automation_risk_acknowledged_at"]:
                 continue
+            with self.repository.transaction() as connection:
+                state = connection.execute(
+                    "SELECT paused_reason FROM automation_route_state WHERE route_id = ?",
+                    (route["id"],),
+                ).fetchone()
+            if state and state["paused_reason"]:
+                continue
             if not _interval_due(route["last_synced_at"], int(policy["automation_interval_minutes"])):
                 continue
             with self.repository.transaction() as connection:
                 prepared = connection.execute(
-                    "SELECT 1 FROM sync_receipts WHERE route_id = ? AND status = 'prepared' LIMIT 1",
+                    "SELECT 1 FROM sync_receipts WHERE route_id = ? AND status IN ('prepared', 'dispatching', 'sent_unconfirmed') LIMIT 1",
                     (route["id"],),
                 ).fetchone()
             if prepared:
@@ -202,9 +223,41 @@ class SyncService:
                     "target_platform": route["target_platform"],
                     "target_label": route["target_label"],
                     "change_count": changes,
+                    "conversation_url": policy.get("conversation_url"),
+                    "create_new_conversation": bool(policy.get("create_new_conversation", True)),
                 }
             )
         return jobs
+
+    def bind_browser_context(
+        self,
+        route_id: str,
+        *,
+        conversation_url: str,
+        account_fingerprint: str | None = None,
+    ) -> dict[str, Any]:
+        route = self._route(route_id)
+        provider = PROVIDERS.get(str(route["target_platform"]))
+        parsed = urlparse(conversation_url)
+        if not provider or parsed.scheme != "https" or parsed.hostname not in provider.hostnames:
+            raise ValueError("Conversation URL does not match the route provider")
+        policy = _validate_policy(json.loads(route["policy_json"]))
+        policy["conversation_url"] = conversation_url[:2000]
+        policy["create_new_conversation"] = False
+        if account_fingerprint:
+            policy["account_fingerprint"] = account_fingerprint[:200]
+        with self.repository.transaction() as connection:
+            connection.execute(
+                "UPDATE sync_routes SET policy_json = ?, updated_at = ? WHERE id = ?",
+                (json.dumps(policy, sort_keys=True), utc_now(), route_id),
+            )
+        self.repository.append_event(
+            "route.browser_context_bound",
+            "sync_route",
+            route_id,
+            {"conversation_url": conversation_url[:2000], "has_account_fingerprint": bool(account_fingerprint)},
+        )
+        return {"route_id": route_id, "conversation_url": policy["conversation_url"]}
 
     def run_automation(self, route_id: str) -> dict[str, Any]:
         route = self._route(route_id)
@@ -212,6 +265,32 @@ class SyncService:
         if policy["automation_mode"] != "full" or not policy["automation_risk_acknowledged_at"]:
             raise ValueError("Full automation is not enabled for this route")
         return self.run(route_id, approve_sensitive=False)
+
+    def record_automation_failure(self, route_id: str, reason: str) -> dict[str, Any]:
+        self._route(route_id)
+        now = utc_now()
+        with self.repository.transaction() as connection:
+            row = connection.execute(
+                "SELECT consecutive_failures FROM automation_route_state WHERE route_id = ?",
+                (route_id,),
+            ).fetchone()
+            failures = int(row[0]) + 1 if row else 1
+            paused = "three_consecutive_adapter_failures" if failures >= 3 else None
+            connection.execute(
+                """
+                INSERT INTO automation_route_state(route_id, consecutive_failures, paused_reason, last_error, updated_at)
+                VALUES (?, ?, ?, ?, ?)
+                ON CONFLICT(route_id) DO UPDATE SET consecutive_failures = excluded.consecutive_failures,
+                    paused_reason = excluded.paused_reason, last_error = excluded.last_error,
+                    updated_at = excluded.updated_at
+                """,
+                (route_id, failures, paused, reason[:300], now),
+            )
+        self.repository.append_event(
+            "route.automation_failed", "sync_route", route_id,
+            {"reason": reason[:300], "consecutive_failures": failures, "paused": bool(paused)},
+        )
+        return {"route_id": route_id, "consecutive_failures": failures, "paused_reason": paused}
 
     def set_sensitive_sync(self, enabled: bool) -> None:
         with self.repository.transaction() as connection:
@@ -428,8 +507,8 @@ class SyncService:
                 raise ValueError("Unknown sync receipt")
             if row["status"] == "completed":
                 return dict(row)
-            if row["status"] != "prepared":
-                raise ValueError("Only a prepared receipt can be acknowledged")
+            if row["status"] not in {"prepared", "dispatching", "sent_unconfirmed"}:
+                raise ValueError("Only a prepared or dispatched receipt can be acknowledged")
             connection.execute(
                 "UPDATE sync_receipts SET status = 'completed', completed_at = ? WHERE id = ?",
                 (now, receipt_id),
@@ -438,8 +517,58 @@ class SyncService:
                 "UPDATE sync_targets SET last_synced_at = ? WHERE id = ?",
                 (now, row["target_id"]),
             )
+            if row["route_id"]:
+                connection.execute(
+                    "UPDATE automation_route_state SET consecutive_failures = 0, paused_reason = NULL, last_error = NULL, updated_at = ? WHERE route_id = ?",
+                    (now, row["route_id"]),
+                )
         self.repository.append_event(
             "sync.completed", "sync_receipt", receipt_id, {"completed_at": now}
+        )
+        return next(item for item in self.list_receipts() if item["id"] == receipt_id)
+
+    def begin_dispatch(self, receipt_id: str) -> dict[str, Any]:
+        """Claim a prepared receipt before any browser send attempt.
+
+        A dispatching receipt is intentionally not automatically retried: the browser
+        service worker may disappear after clicking but before reporting success.
+        """
+        now = utc_now()
+        with self.repository.transaction() as connection:
+            row = connection.execute(
+                "SELECT * FROM sync_receipts WHERE id = ?", (receipt_id,)
+            ).fetchone()
+            if row is None:
+                raise ValueError("Unknown sync receipt")
+            if row["status"] != "prepared":
+                raise ValueError("Only a prepared receipt can begin dispatch")
+            connection.execute(
+                "UPDATE sync_receipts SET status = 'dispatching', dispatch_started_at = ? WHERE id = ?",
+                (now, receipt_id),
+            )
+        self.repository.append_event(
+            "sync.dispatching", "sync_receipt", receipt_id, {"dispatch_started_at": now}
+        )
+        return next(item for item in self.list_receipts() if item["id"] == receipt_id)
+
+    def mark_send_attempted(self, receipt_id: str) -> dict[str, Any]:
+        now = utc_now()
+        with self.repository.transaction() as connection:
+            row = connection.execute(
+                "SELECT status FROM sync_receipts WHERE id = ?", (receipt_id,)
+            ).fetchone()
+            if row is None:
+                raise ValueError("Unknown sync receipt")
+            if row["status"] in {"sent_unconfirmed", "completed"}:
+                return next(item for item in self.list_receipts() if item["id"] == receipt_id)
+            if row["status"] != "dispatching":
+                raise ValueError("Only a dispatching receipt can record a send attempt")
+            connection.execute(
+                "UPDATE sync_receipts SET status = 'sent_unconfirmed', send_attempted_at = ? WHERE id = ?",
+                (now, receipt_id),
+            )
+        self.repository.append_event(
+            "sync.send_attempted", "sync_receipt", receipt_id, {"send_attempted_at": now}
         )
         return next(item for item in self.list_receipts() if item["id"] == receipt_id)
 
@@ -451,11 +580,11 @@ class SyncService:
             ).fetchone()
             if row is None:
                 raise ValueError("Unknown sync receipt")
-            if row["status"] != "prepared":
-                raise ValueError("Only a prepared receipt can be marked failed")
+            if row["status"] not in {"prepared", "dispatching"} or row["send_attempted_at"]:
+                raise ValueError("A receipt cannot fail automatically after a possible send")
             connection.execute(
-                "UPDATE sync_receipts SET status = 'failed', completed_at = ? WHERE id = ?",
-                (now, receipt_id),
+                "UPDATE sync_receipts SET status = 'failed', completed_at = ?, failure_reason = ? WHERE id = ?",
+                (now, reason[:300], receipt_id),
             )
         self.repository.append_event(
             "sync.failed",

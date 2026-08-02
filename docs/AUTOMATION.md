@@ -22,15 +22,18 @@ contextvault routes automation <route-id> \
 - 全局敏感开关关闭时，private/sensitive 仍被阻止；
 - `ask` 字段不会进入全自动任务；
 - `allow` 私密字段仍要求目标账号、类别匹配的有效 ConsentReceipt；
-- 没有 diff 不发送；同一 route 存在 prepared receipt 时不重复发送；
-- 找不到输入框或明确发送按钮时安全停止；失败 receipt 可追踪并允许重试；
+- 没有 diff 不发送；同一 route 存在未解决 receipt 时不重复发送；
+- 找不到输入框或明确发送按钮时安全停止；确定未发送的失败可追踪并在后续周期重试；
 - 自动模式不抓 Cookie，不在服务器模拟登录。
+- 自动拉取仅处理用户绑定的当前对话；空白对话可创建资料探测任务，平台回答只进入低置信度候选区；
+- 连续三次适配失败自动暂停，必须显式重新启用；
+- 可能已经点击发送的任务进入不确定状态，绝不自动重发。
 
 运行 `contextvault daemon install` 可把 loopback API 安装为 macOS LaunchAgent、Linux systemd user
 service 或 Windows 登录任务。完成一次安装和扩展配对后，日常只需保持浏览器登录；后台服务与扩展
 会在用户登录系统和启动 Chrome 后恢复。
 
-DOM 自动化不能证明平台已经理解或永久保存资料；`completed` 只表示扩展点击了已识别发送按钮，
+DOM 自动化不能证明平台已经理解或永久保存资料；`completed` 只表示扩展点击了已识别发送按钮并完成本地确认，
 不是远程读取或删除证明。
 
 ## 为什么主线不使用油猴脚本

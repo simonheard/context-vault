@@ -2,7 +2,7 @@
 
 [English](IMPLEMENTATION_STATUS.en.md)
 
-## v0.9 自动化、CLI 与兼容协议
+## v0.10 双向自动化、总结引擎与安全恢复
 
 以下能力已经可以通过 CLI 或本地管理后台运行：
 
@@ -22,14 +22,17 @@
 - 半自动预览/填入，以及逐路线风险确认、定时调度、安全按钮探测、失败重试的全自动模式；
 - Codex、Claude Code、Gemini CLI 等九种编程助手的项目级/全局托管资料块；
 - macOS LaunchAgent、Linux systemd user service 和 Windows Task Scheduler 常驻服务定义；
-- protocol 2 / schema 8 兼容协商、客户端登记和 CLI 托管块原位升级。
+- protocol 3 / schema 9 协商、每客户端 Token、Origin/Host/JSON 校验和 DNS-rebinding 防护；
+- 当前对话拉取、空白页资料探测、低置信度候选、专用推送对话绑定和三次失败熔断；
+- `dispatching` / `sent_unconfirmed` 回执、页面标记与重启恢复，避免不确定发送被重复执行；
+- 确定性、Ollama、LM Studio、OpenAI-compatible、Codex CLI 和 Claude Code 总结引擎。
 
 ## 需要外部平台或部署基础设施的能力
 
 这些能力不能在没有目标平台授权、登录态或同步服务器的情况下由本地仓库独立完成：
 
 - 各平台官方 API、文件上传、远程删除结果和同步后问答验证；
-- 用户主动批准的新对话增量捕获（目前扩展只写入，不读取历史对话）；
+- 平台完整历史列表批量读取（当前只读明确绑定的对话或官方导出）；
 - 附件即时下载并转传到另一个已登录账号；
 - 多设备端到端加密同步服务器、密钥恢复和设备撤销（当前已实现事件游标和协议边界）；
 - 可选本地 LLM 与日历、联系人、代码仓库、智能家居连接器。
@@ -56,5 +59,7 @@ contextvault routes automation <route-id> --mode full --interval 60 --acknowledg
 contextvault cli install codex --scope project
 contextvault cli sync
 contextvault daemon install
+contextvault models detect
+contextvault captures enable <account-id> --acknowledge-privacy-risk
 contextvault ui
 ```

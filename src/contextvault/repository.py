@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import hashlib
+import hmac
 import json
 import sqlite3
 import secrets
@@ -59,6 +60,7 @@ class VaultRepository:
                 "INSERT OR REPLACE INTO metadata(key, value) VALUES ('extension_pairing_token', ?)",
                 (token,),
             )
+            connection.execute("UPDATE sync_clients SET token_hash = NULL, status = 'revoked'")
             self._append_event(
                 connection,
                 "extension.pairing_token_rotated",
@@ -112,6 +114,15 @@ class VaultRepository:
             ).fetchall()
         return [_account_from_row(row) for row in rows]
 
+    def get_account(self, account_id: str) -> ProviderAccount:
+        with self.transaction() as connection:
+            row = connection.execute(
+                "SELECT * FROM provider_accounts WHERE id = ?", (account_id,)
+            ).fetchone()
+        if row is None:
+            raise ValueError("Unknown provider account")
+        return _account_from_row(row)
+
     def update_account(
         self, account_id: str, *, label: Optional[str] = None, status: Optional[str] = None
     ) -> ProviderAccount:
@@ -138,6 +149,10 @@ class VaultRepository:
                 )
                 connection.execute(
                     "UPDATE sync_routes SET enabled = 0, updated_at = ? WHERE source_account_id = ?",
+                    (now, account_id),
+                )
+                connection.execute(
+                    "UPDATE capture_sources SET enabled = 0, updated_at = ? WHERE account_id = ?",
                     (now, account_id),
                 )
             self._append_event(
@@ -265,10 +280,11 @@ class VaultRepository:
                 INSERT INTO source_imports(
                     id, source_type, account_id, source_name, source_hash,
                     conversation_count, message_count, status, created_at, completed_at
-                ) VALUES (?, 'chatgpt_export', ?, ?, ?, ?, ?, 'completed', ?, ?)
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, 'completed', ?, ?)
                 """,
                 (
                     import_id,
+                    bundle.source_type,
                     account_id,
                     bundle.source_name,
                     bundle.source_hash,
@@ -751,36 +767,54 @@ class VaultRepository:
         if protocol_version < 1:
             raise ValueError("Protocol version must be positive")
         compatibility = check_protocol(protocol_version)
+        client_token = secrets.token_urlsafe(32)
+        token_hash = hashlib.sha256(client_token.encode()).hexdigest()
         now = utc_now()
         status = "active" if compatibility.compatible else "incompatible"
         with self.transaction() as connection:
             connection.execute(
                 """
                 INSERT INTO sync_clients(
-                    id, client_type, client_version, protocol_version, status, last_seen_at
-                ) VALUES (?, ?, ?, ?, ?, ?)
+                    id, client_type, client_version, protocol_version, status, token_hash, last_seen_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?)
                 ON CONFLICT(id) DO UPDATE SET
                     client_type = excluded.client_type,
                     client_version = excluded.client_version,
                     protocol_version = excluded.protocol_version,
                     status = excluded.status,
+                    token_hash = excluded.token_hash,
                     last_seen_at = excluded.last_seen_at
                 """,
-                (client_id, client_type, client_version, protocol_version, status, now),
+                (client_id, client_type, client_version, protocol_version, status, token_hash, now),
             )
         return {
             "id": client_id,
             "status": status,
             "compatibility": compatibility.__dict__,
             "last_seen_at": now,
+            "client_token": client_token,
         }
+
+    def authorize_local_token(self, token: str) -> bool:
+        if not token:
+            return False
+        enrollment = self.extension_pairing_token()
+        if hmac.compare_digest(token, enrollment):
+            return True
+        token_hash = hashlib.sha256(token.encode()).hexdigest()
+        with self.transaction() as connection:
+            row = connection.execute(
+                "SELECT 1 FROM sync_clients WHERE token_hash = ? AND status = 'active'",
+                (token_hash,),
+            ).fetchone()
+        return row is not None
 
     def list_clients(self) -> list[dict[str, Any]]:
         with self.transaction() as connection:
             rows = connection.execute(
                 "SELECT * FROM sync_clients ORDER BY last_seen_at DESC"
             ).fetchall()
-        return [dict(row) for row in rows]
+        return [{key: row[key] for key in row.keys() if key != "token_hash"} for row in rows]
 
     def _append_event(
         self,

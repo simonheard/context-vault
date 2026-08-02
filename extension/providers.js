@@ -19,6 +19,42 @@ const CONTEXTVAULT_PROVIDERS = {
   hailuo: { name: "海螺 AI", hosts: ["hailuoai.com", "www.hailuoai.com"], startUrl: "https://hailuoai.com/", composers: ["textarea", "div[contenteditable='true']"], send: ["button[aria-label*='发送']", "button[type='submit']"] },
 };
 
+const CONTEXTVAULT_CAPTURE_SELECTORS = {
+  chatgpt: [
+    { selector: "[data-message-author-role]", roleAttribute: "data-message-author-role" },
+  ],
+  gemini: [
+    { selector: ".user-query-container, user-query", role: "user" },
+    { selector: ".model-response-text, model-response", role: "assistant" },
+  ],
+  claude: [
+    { selector: "[data-testid='user-message']", role: "user" },
+    { selector: "[data-testid='assistant-message'], [data-is-streaming]", role: "assistant" },
+  ],
+  deepseek: [
+    { selector: "[data-message-author-role]", roleAttribute: "data-message-author-role" },
+  ],
+};
+
+const CONTEXTVAULT_PROVIDER_MATURITY = {
+  chatgpt: "beta",
+  gemini: "beta",
+  claude: "beta",
+  deepseek: "beta",
+};
+
 function contextVaultProviderForHostname(hostname) {
   return Object.entries(CONTEXTVAULT_PROVIDERS).find(([, item]) => item.hosts.includes(hostname))?.[0] || null;
+}
+
+function contextVaultProviderMaturity(provider) {
+  return CONTEXTVAULT_PROVIDER_MATURITY[provider] || "experimental";
+}
+
+function contextVaultCaptureSelectors(provider) {
+  return CONTEXTVAULT_CAPTURE_SELECTORS[provider] || [
+    { selector: "[data-message-author-role]", roleAttribute: "data-message-author-role" },
+    { selector: "[data-role='user'], [data-testid*='user-message']", role: "user" },
+    { selector: "[data-role='assistant'], [data-testid*='assistant-message']", role: "assistant" },
+  ];
 }

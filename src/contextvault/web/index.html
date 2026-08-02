@@ -92,6 +92,16 @@
               </form>
             </article>
           </div>
+          <article class="panel timeline-panel">
+            <div class="panel-heading"><div><p class="eyebrow">SUMMARY ENGINE</p><h3>自动总结</h3></div><span class="chip" id="model-status">正在探测…</span></div>
+            <form id="summary-form">
+              <div class="grid form-layout">
+                <div><label>引擎<select name="engine"><option value="deterministic">内置确定性（默认）</option><option value="ollama">Ollama 本地</option><option value="lmstudio">LM Studio 本地</option><option value="codex-cli">已登录 Codex CLI</option><option value="claude-code">已登录 Claude Code</option><option value="openai-compatible">其他 OpenAI-compatible</option></select></label><label>摘要类型<select name="summary_type"><option value="personal">个人简介</option><option value="full">完整档案</option><option value="work">工作</option><option value="project">项目</option><option value="devices">设备</option><option value="recent">最近变化</option></select></label><label>模型 ID<input name="model" placeholder="例如 qwen3:8b"></label></div>
+                <div><label>Endpoint<input name="base_url" placeholder="本地引擎可留空"></label><label>API Key 环境变量名<input name="api_key_env" placeholder="只保存名称，不接收 key 值"></label><label class="check"><input name="allow_cloud" type="checkbox" value="true"><span>我理解 CLI 或远程 Endpoint 会把所选资料发送给模型提供商。</span></label></div>
+              </div>
+              <button class="primary" type="submit">生成可追溯摘要</button><p class="form-message" id="summary-message"></p><textarea id="summary-output" readonly placeholder="模型输出会在这里显示；标准 Claim 不会被模型直接修改。"></textarea>
+            </form>
+          </article>
         </section>
 
         <section class="view" id="accounts-view">

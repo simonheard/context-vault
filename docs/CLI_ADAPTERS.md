@@ -10,7 +10,7 @@
 - Cursor、GitHub Copilot、Cline、Windsurf、Aider 和 OpenCode。
 
 ContextVault 使用 HTML 注释包围的 managed block。更新时只替换自己的区块，保留已有项目规则；
-protocol 1 等旧区块会原位升级到 protocol 2，不会重复追加。默认写项目级文件，只有用户明确指定
+protocol 1/2 等旧区块会原位升级到 protocol 3，不会重复追加。默认写项目级文件，只有用户明确指定
 `--scope global` 才写入用户目录。
 
 ```bash

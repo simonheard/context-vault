@@ -4,7 +4,7 @@
 
 ## 当前注册表
 
-浏览器扩展 v0.2 注册了以下平台：
+浏览器扩展 v0.3 注册了以下平台：
 
 - 国际：ChatGPT、Gemini、Claude、Perplexity、Microsoft Copilot、Grok、Mistral Le Chat、Poe；
 - 国产：DeepSeek、Kimi、通义千问/Qwen、豆包、腾讯元宝、智谱清言、文心一言/文小言、讯飞星火、天工 AI、海螺 AI。
@@ -17,7 +17,7 @@
 
 网页 DOM 不是稳定 API。半自动模式在找不到输入框时停止并允许复制文本；全自动模式只有在同时找到
 已知输入框和已知发送按钮时才点击，通用 `button[type=submit]` 只能在输入框所属表单内使用。
-适配失败会把 receipt 标成 `failed`，不会假装同步完成，并允许下一周期重试。
+ChatGPT、Gemini、Claude 和 DeepSeek 的当前对话拉取适配为 beta，其余平台为 experimental；所有平台都仍可能因 DOM 更新而失效。确定未发送的适配失败会记录为 `failed`；可能已经点击发送时进入 `dispatching` 或 `sent_unconfirmed`，等待页面标记恢复或用户处理，绝不自动重试。连续三次适配失败会熔断暂停。
 
 用户可以运行 `contextvault providers` 查看服务端当前能力声明。新增平台需要同时增加：
 

@@ -123,9 +123,11 @@ The same canonical profile can produce:
 ### Synchronization
 
 Each target has its own allowed categories, sensitivity ceiling, size limit,
-frequency, and preview policy. The browser extension writes only in a page where
-the user is already signed in and has allowed the action. Cookies are never
-uploaded and the server never impersonates the user.
+frequency, and preview policy. On explicitly authorized, signed-in pages, the
+browser extension can pull the current conversation, create a dedicated
+conversation, or write approved profile data. Pull and push automation are
+enabled separately per account and route with risk acknowledgement. Cookies are
+never uploaded and the server never impersonates the user.
 
 Sensitive information uses three modes: `block` (never send), `ask` (confirm
 every time), and `allow` (automatic sync within an explicit scope). Policies are
@@ -168,10 +170,11 @@ correct environment.
 
 ### MVP 4 — Incremental automatic sync
 
-- Capture explicitly allowed new messages through the extension.
+- Capture an explicitly allowed current conversation, or create a low-confidence knowledge probe on a blank page.
 - Extract incrementally and detect changes.
 - Auto-sync low-risk fields according to policy.
 - Route conflicts and sensitive changes to review.
+- Create or reuse a dedicated target conversation and use persistent receipts to prevent ambiguous sends from being repeated.
 - Add end-to-end encrypted multi-device synchronization.
 
 ## Later capabilities

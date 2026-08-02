@@ -81,7 +81,7 @@ The first release prioritizes:
 
 ## Repository status
 
-This repository now contains a runnable local closed loop, user-session adapters, and coding-agent adapters (v0.9.0):
+This repository now contains a runnable local closed loop, bidirectional user-session automation, and coding-agent adapters (v0.10.0):
 
 - a zero-dependency Python CLI;
 - a SQLite store and explicit domain model centered on `Entity`, `Claim`, `ProviderAccount`, `ProfileSpace`, and `AttachmentRef`;
@@ -95,6 +95,9 @@ This repository now contains a runnable local closed loop, user-session adapters
 - device scanning, sync policy, preview diffs, profile packages, informed consent, and sync receipts.
 - 18 web AI adapters spanning global and Chinese services, including ChatGPT, Gemini, Claude, DeepSeek, Kimi, Qwen, Doubao, and Tencent Yuanbao;
 - a Chrome extension with review-and-fill mode and explicitly acknowledged scheduled full automation;
+- scheduled capture from approved web conversations and new knowledge-probe chats whose answers remain low-confidence candidates;
+- a duplicate-safe receipt state machine, page markers, interrupted-run recovery, and circuit breakers;
+- summary engines for Ollama, LM Studio, OpenAI-compatible endpoints, Codex CLI, and Claude Code;
 - project or global profile-file adapters for Codex, Claude Code, Gemini CLI, Cursor, Copilot, Cline, Windsurf, Aider, and OpenCode;
 - schema, event, and client protocol negotiation plus in-place upgrades of CLI-managed blocks.
 
@@ -125,6 +128,9 @@ contextvault cli install codex --scope project
 contextvault cli install claude-code --scope project
 contextvault cli sync
 contextvault daemon install
+contextvault models detect
+contextvault summary --type personal --engine ollama --model qwen3:8b
+contextvault captures enable <account-id> --acknowledge-privacy-risk
 PYTHONPATH=src python3 -m unittest discover -s tests
 ```
 
@@ -133,7 +139,7 @@ PYTHONPATH=src python3 -m unittest discover -s tests
 ```text
 Official provider APIs and attachment-upload adapters
 End-to-end encrypted multi-device sync server
-Optional local LLM and external data connectors
+External data connectors
 ```
 
 ## Documentation
@@ -152,3 +158,5 @@ Optional local LLM and external data connectors
 - [CLI and coding-agent adapters](docs/CLI_ADAPTERS.en.md)
 - [Full automation and safety boundaries](docs/AUTOMATION.en.md)
 - [Cross-version synchronization protocol](docs/VERSIONING.en.md)
+- [Bidirectional web capture](docs/CAPTURE.en.md)
+- [Automatic summary engines](docs/MODEL_ENGINES.en.md)

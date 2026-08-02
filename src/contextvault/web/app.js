@@ -8,6 +8,7 @@ const titles = {
   privacy: "隐私与授权",
   history: "同步历史",
 };
+let detectedModels = [];
 
 function showView(name) {
   document.querySelectorAll(".view").forEach((element) => element.classList.remove("active"));
@@ -132,6 +133,19 @@ async function loadProviders() {
   other.textContent = "其他";
   selector.append(other);
 }
+
+async function loadModels() {
+  const { items } = await api("/api/models");
+  detectedModels = items;
+  const available = items.filter((item) => item.available).map((item) => item.id);
+  document.getElementById("model-status").textContent = available.join(" · ") || "仅确定性";
+}
+
+document.querySelector("#summary-form [name='engine']").addEventListener("change", (event) => {
+  const probe = detectedModels.find((item) => item.id === event.target.value);
+  const modelInput = document.querySelector("#summary-form [name='model']");
+  if (probe?.models?.length && !modelInput.value) modelInput.value = probe.models[0];
+});
 
 async function claimAction(claimId, action) {
   await api(`/api/claims/${claimId}/${action}`, { method: "POST", body: "{}" });
@@ -269,15 +283,29 @@ async function loadReceipts() {
   }
   items.forEach((item) => {
     const row = listItem(item.profile_version, `${item.manifest.claims.length} claims`, item.status);
-    if (item.status === "prepared") {
+    if (["prepared", "dispatching", "sent_unconfirmed"].includes(item.status)) {
       const button = document.createElement("button");
       button.className = "mini-button confirm";
-      button.textContent = "确认已发送";
+      button.textContent = item.status === "prepared" ? "确认已发送" : "解决：页面已发送";
       button.addEventListener("click", async () => {
         await api(`/api/receipts/${item.id}/acknowledge`, { method: "POST", body: "{}" });
         await Promise.all([loadReceipts(), loadEvents()]);
       });
-      row.querySelector(".chip").replaceWith(button);
+      if (item.status === "dispatching") {
+        const actions = document.createElement("span");
+        actions.className = "row-actions";
+        const notSent = document.createElement("button");
+        notSent.className = "mini-button reject";
+        notSent.textContent = "解决：未发送";
+        notSent.addEventListener("click", async () => {
+          await api(`/api/receipts/${item.id}/fail`, { method: "POST", body: JSON.stringify({ reason: "user_confirmed_not_sent" }) });
+          await Promise.all([loadReceipts(), loadEvents()]);
+        });
+        actions.append(button, notSent);
+        row.querySelector(".chip").replaceWith(actions);
+      } else {
+        row.querySelector(".chip").replaceWith(button);
+      }
     }
     list.append(row);
   });
@@ -369,6 +397,23 @@ document.getElementById("route-form").addEventListener("submit", async (event) =
   }
 });
 
+document.getElementById("summary-form").addEventListener("submit", async (event) => {
+  event.preventDefault();
+  const form = event.currentTarget;
+  const values = Object.fromEntries(new FormData(form));
+  values.allow_cloud = values.allow_cloud === "true";
+  const message = document.getElementById("summary-message");
+  try {
+    const { item } = await api("/api/summaries/generate", { method: "POST", body: JSON.stringify(values) });
+    document.getElementById("summary-output").value = item.content;
+    message.className = "form-message";
+    message.textContent = `${item.engine}${item.model ? ` / ${item.model}` : ""}，引用 ${item.claim_ids.length} 条 Claim。`;
+  } catch (error) {
+    message.className = "form-message error";
+    message.textContent = error.message;
+  }
+});
+
 document.getElementById("scan-device").addEventListener("click", async () => {
   const button = document.getElementById("scan-device");
   button.disabled = true;
@@ -396,6 +441,6 @@ document.getElementById("copy-extension-token").addEventListener("click", async 
   window.setTimeout(() => { input.type = "password"; }, 5000);
 });
 
-Promise.all([loadDashboard(), loadAccounts(), loadSpaces(), loadProviders(), loadClaims(), loadEvents(), loadDevices(), loadRoutes(), loadPrivacy(), loadReceipts()]).catch((error) => {
+Promise.all([loadDashboard(), loadAccounts(), loadSpaces(), loadProviders(), loadModels(), loadClaims(), loadEvents(), loadDevices(), loadRoutes(), loadPrivacy(), loadReceipts()]).catch((error) => {
   document.querySelector("main").dataset.error = error.message;
 });

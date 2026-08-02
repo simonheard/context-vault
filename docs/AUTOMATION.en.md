@@ -21,13 +21,16 @@ contextvault routes automation <route-id> \
 - private/sensitive data remains blocked while the global sensitive gate is off;
 - `ask` fields never enter unattended jobs;
 - `allow` private fields still require active consent matching the target account and category;
-- no diff means no send, and a prepared receipt prevents duplicate sends;
-- a missing composer or explicit send button stops safely; failed receipts remain auditable and retryable;
+- no diff means no send, and any unresolved receipt prevents duplicate sends;
+- a missing composer or explicit send button stops safely; failures known not to have sent remain auditable and retryable;
 - automation never scrapes cookies or simulates provider login on a server.
+- pull automation reads only the bound current conversation; a blank chat may run a knowledge probe whose provider answer remains a low-confidence candidate;
+- three consecutive adapter failures pause the source or route until explicitly re-enabled;
+- a possibly clicked send enters an ambiguous state and is never retried automatically.
 
 `contextvault daemon install` installs the loopback API as a macOS LaunchAgent, Linux systemd user service, or Windows logon task. After one-time installation and extension pairing, normal operation requires only that the user stay signed in; the local service and extension resume at OS login and Chrome startup.
 
-DOM automation cannot prove that a provider understood or permanently retained the profile. `completed` means the extension clicked a recognized Send control; it is not proof of remote ingestion or deletion.
+DOM automation cannot prove that a provider understood or permanently retained the profile. `completed` means the extension clicked a recognized Send control and completed its local acknowledgement; it is not proof of remote ingestion or deletion.
 
 ## Why a userscript is not the primary implementation
 

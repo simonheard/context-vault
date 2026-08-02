@@ -24,6 +24,7 @@ class ImportBundle:
     source_hash: str
     conversation_count: int
     messages: list[ImportedMessage]
+    source_type: str = "chatgpt_export"
 
 
 def load_chatgpt_export(path: Path) -> ImportBundle:
@@ -51,7 +52,7 @@ def load_chatgpt_export(path: Path) -> ImportBundle:
         title = str(conversation.get("title") or "Untitled conversation")
         conversation_ids.add(conversation_id)
         messages.extend(_messages_from_conversation(conversation, conversation_id, title))
-    return ImportBundle(path.name, source_hash, len(conversation_ids), messages)
+    return ImportBundle(path.name, source_hash, len(conversation_ids), messages, "chatgpt_export")
 
 
 def _messages_from_conversation(

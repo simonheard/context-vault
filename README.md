@@ -77,7 +77,7 @@ ChatGPT 历史对话       设备扫描       手动填写       其他数据源
 
 ## 当前仓库状态
 
-当前已经具备可运行的本地完整闭环、用户登录态适配器和 CLI 适配器（v0.9.0），包含：
+当前已经具备可运行的本地完整闭环、双向用户登录态自动化和 CLI 适配器（v0.10.0），包含：
 
 - 零依赖 Python CLI；
 - SQLite 资料库与显式领域模型，核心对象为 `Entity`、`Claim`、`ProviderAccount`、`ProfileSpace` 和 `AttachmentRef`；
@@ -91,6 +91,9 @@ ChatGPT 历史对话       设备扫描       手动填写       其他数据源
 - 设备扫描、同步策略、预览 diff、资料包、知情同意与同步回执。
 - 18 个网页 AI 适配器，覆盖 ChatGPT、Gemini、Claude、DeepSeek、Kimi、通义千问、豆包、腾讯元宝等国际与国产服务商；
 - Chrome 用户侧扩展：半自动预览/填入，以及显式风险确认后的定时全自动发送；
+- 从已授权网页定时拉取对话；空白页可创建资料探测对话，把平台回答作为低置信度候选；
+- 防重复回执状态机、页面版本标记、中断恢复和连续失败自动熔断；
+- Ollama、LM Studio、OpenAI-compatible、Codex CLI 与 Claude Code 总结引擎；
 - Codex、Claude Code、Gemini CLI、Cursor、Copilot、Cline、Windsurf、Aider 和 OpenCode 的项目级或全局资料文件适配器；
 - schema、事件和客户端协议版本协商，以及 CLI 托管块的原位升级。
 
@@ -121,6 +124,9 @@ contextvault cli install codex --scope project
 contextvault cli install claude-code --scope project
 contextvault cli sync
 contextvault daemon install
+contextvault models detect
+contextvault summary --type personal --engine ollama --model qwen3:8b
+contextvault captures enable <account-id> --acknowledge-privacy-risk
 PYTHONPATH=src python3 -m unittest discover -s tests
 ```
 
@@ -129,7 +135,7 @@ PYTHONPATH=src python3 -m unittest discover -s tests
 ```text
 各平台官方 API 与附件上传适配器
 端到端加密多设备同步服务器
-可选本地 LLM 与外部数据连接器
+外部数据连接器
 ```
 
 ## 文档
@@ -148,3 +154,5 @@ PYTHONPATH=src python3 -m unittest discover -s tests
 - [CLI 与编程助手适配器](docs/CLI_ADAPTERS.md)
 - [全自动模式与安全边界](docs/AUTOMATION.md)
 - [跨版本同步协议](docs/VERSIONING.md)
+- [网页双向捕获](docs/CAPTURE.md)
+- [自动总结引擎](docs/MODEL_ENGINES.md)

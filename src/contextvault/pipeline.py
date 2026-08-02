@@ -1,12 +1,14 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+import hashlib
+import json
 from pathlib import Path
 from typing import Optional
 
 from contextvault.domain import ClaimStatus, SourceType
 from contextvault.extractors import extract_profile_candidates
-from contextvault.importers import load_chatgpt_export
+from contextvault.importers import ImportBundle, ImportedMessage, load_chatgpt_export
 from contextvault.repository import VaultRepository
 from contextvault.services import ProfileService
 
@@ -44,6 +46,79 @@ class ImportPipeline:
     ) -> PipelineResult:
         bundle = load_chatgpt_export(path)
         imported = self.repository.store_import(bundle, account_id)
+        return self._extract_import(imported, account_id, space, "chatgpt", extract)
+
+    def import_browser_capture(
+        self,
+        *,
+        provider: str,
+        account_id: str,
+        conversation_url: str,
+        title: str,
+        messages: list[dict[str, object]],
+        space: str = "personal",
+        extract: bool = True,
+        knowledge_probe: bool = False,
+    ) -> PipelineResult:
+        if not 1 <= len(messages) <= 2000:
+            raise ValueError("A browser capture must contain between 1 and 2000 messages")
+        normalized: list[ImportedMessage] = []
+        total_chars = 0
+        conversation_id = hashlib.sha256(conversation_url.encode()).hexdigest()[:24]
+        for index, item in enumerate(messages):
+            role = str(item.get("role", ""))
+            content = str(item.get("content", "")).strip()
+            if role not in {"user", "assistant"} or not content:
+                continue
+            total_chars += len(content)
+            if total_chars > 2_000_000:
+                raise ValueError("Browser capture exceeds the two-million-character limit")
+            message_id = str(item.get("id") or hashlib.sha256(f"{role}\0{content}\0{index}".encode()).hexdigest()[:24])
+            normalized.append(
+                ImportedMessage(
+                    conversation_id=conversation_id,
+                    conversation_title=title[:200] or "Captured conversation",
+                    message_id=message_id[:200],
+                    role=role,
+                    content=content,
+                    created_at=str(item.get("created_at")) if item.get("created_at") else None,
+                )
+            )
+        if not normalized:
+            raise ValueError("Browser capture contains no supported messages")
+        canonical = json.dumps(
+            [{"id": item.message_id, "role": item.role, "content": item.content} for item in normalized],
+            ensure_ascii=False,
+            sort_keys=True,
+        )
+        bundle = ImportBundle(
+            source_name=f"{provider} browser: {title[:120]}",
+            source_hash=hashlib.sha256(f"{provider}\0{account_id}\0{canonical}".encode()).hexdigest(),
+            conversation_count=1,
+            messages=normalized,
+            source_type=f"{provider}_browser_capture",
+        )
+        imported = self.repository.store_import(bundle, account_id)
+        return self._extract_import(
+            imported,
+            account_id,
+            space,
+            provider,
+            extract,
+            extract_role="assistant" if knowledge_probe else "user",
+            confidence_scale=0.65 if knowledge_probe else 1.0,
+        )
+
+    def _extract_import(
+        self,
+        imported: dict[str, object],
+        account_id: Optional[str],
+        space: str,
+        platform: str,
+        extract: bool,
+        extract_role: str = "user",
+        confidence_scale: float = 1.0,
+    ) -> PipelineResult:
         import_id = str(imported["id"])
         if not extract:
             return PipelineResult(
@@ -54,8 +129,10 @@ class ImportPipeline:
                 0,
                 0,
             )
-        evidence = self.repository.list_evidence_messages(import_id, "user")
-        candidates = extract_profile_candidates(evidence)
+        evidence = self.repository.list_evidence_messages(import_id, extract_role)
+        candidates = extract_profile_candidates(
+            evidence, roles={extract_role}, confidence_scale=confidence_scale
+        )
         added = duplicates = conflicts = 0
         existing = self.repository.list_claims(space=space, limit=1000)
         for candidate in candidates:
@@ -71,7 +148,7 @@ class ImportPipeline:
                 sensitivity=candidate.sensitivity,
                 source_type=SourceType.IMPORT,
                 account_id=candidate.account_id or account_id,
-                platform="chatgpt",
+                platform=platform,
                 conversation_id=candidate.conversation_id,
                 message_id=candidate.message_id,
             )

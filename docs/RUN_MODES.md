@@ -27,7 +27,7 @@ contextvault-cli profile export-browser contextvault-browser.json
 安装 `context_vault-*.whl` 后只使用 `contextvault-cli`。浏览器扩展、Chrome 和网页管理后台均不是必需条件。
 
 ```bash
-python -m pip install context_vault-0.11.0-py3-none-any.whl
+python -m pip install context_vault-0.12.0-py3-none-any.whl
 contextvault-cli init
 contextvault-cli import chatgpt-export.zip
 contextvault-cli claims confirm-all
@@ -40,5 +40,19 @@ CLI 使用本地 SQLite，支持官方导出、资料审阅、设备、摘要、
 
 ## 可选的高级连接模式
 
-需要 SQLite 全量审计、多账号 route、服务端策略、本地模型或跨客户端事件时，扩展可切换为“连接本地服务”。
-这不会自动复制独立资料库；用户通过 `import --format browser-vault` 或 `profile export-browser` 显式迁移，避免两份资料在不知情时互相覆盖。
+需要 SQLite 全量审计、多账号 route、服务端策略、本地模型或跨客户端事件时，两者可以一起使用：
+
+```bash
+contextvault link
+```
+
+终端显示 8 位短码并启动 loopback 服务。在扩展中输入短码，点击“合并并连接”即可。短码十分钟过期、
+只能使用一次，连续五次错误后作废；长 Token 只保留为高级备用方式。
+
+连接时，扩展把独立资料按“属性 + 内容”去重合并进 SQLite，保留候选/已确认状态，并为当前网页平台创建
+一个自动发送关闭、敏感资料阻止的安全默认账号与路线，然后切换为连接模式。以后打开新平台时，只需点击
+“为当前平台创建默认账号与路线”。
+从此 SQLite 是唯一主资料库，扩展负责网页捕获和推送，不再同时修改独立副本。点击“断开并独立使用”时，
+扩展先从 SQLite 拉取最新快照、撤销当前客户端 Token，再回到独立模式。失败时不删除任何一侧的数据。
+
+JSON `import` / `export-browser` 继续作为离线迁移和备份方式。

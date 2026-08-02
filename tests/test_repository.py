@@ -117,6 +117,16 @@ class RepositoryTests(unittest.TestCase):
         self.assertEqual(len(self.repository.list_clients()), 2)
         self.assertNotIn("token_hash", self.repository.list_clients()[0])
 
+    def test_short_link_code_is_one_time_and_issues_a_client_token(self) -> None:
+        link = self.repository.create_link_code(600)
+        self.assertRegex(link["code"], r"^\d{8}$")
+        client = self.repository.exchange_link_code(link["code"], "linked-extension", "0.5.0", 3)
+        self.assertTrue(self.repository.authorize_local_token(client["client_token"]))
+        with self.assertRaisesRegex(ValueError, "No active link code"):
+            self.repository.exchange_link_code(link["code"], "again", "0.5.0", 3)
+        self.repository.revoke_client("linked-extension")
+        self.assertFalse(self.repository.authorize_local_token(client["client_token"]))
+
     def test_accepts_registered_domestic_provider(self) -> None:
         account = self.repository.add_account("deepseek", "Personal DeepSeek")
         self.assertEqual(account.platform, "deepseek")

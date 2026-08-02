@@ -27,7 +27,7 @@ contextvault-cli profile export-browser contextvault-browser.json
 Install `context_vault-*.whl` and use `contextvault-cli`. The browser extension, Chrome, and web management UI are not required.
 
 ```bash
-python -m pip install context_vault-0.11.0-py3-none-any.whl
+python -m pip install context_vault-0.12.0-py3-none-any.whl
 contextvault-cli init
 contextvault-cli import chatgpt-export.zip
 contextvault-cli claims confirm-all
@@ -39,4 +39,14 @@ The CLI uses local SQLite and supports official exports, review, devices, summar
 
 ## Optional advanced connected mode
 
-The extension can switch to “connect local service” when the user wants complete SQLite auditing, multi-account routes, server policy, local models, or cross-client events. It does not copy the standalone vault automatically. Move data explicitly with `import --format browser-vault` or `profile export-browser` so two profile copies never overwrite each other without the user's knowledge.
+The two surfaces can work together when the user wants complete SQLite auditing, multi-account routes, server policy, local models, or cross-client events:
+
+```bash
+contextvault link
+```
+
+The command displays an eight-digit code and starts the loopback service. Enter the code in the extension and select “merge and connect.” The code expires after ten minutes, works once, and is invalidated after five failed attempts. The long token remains only as an advanced fallback.
+
+On link, the extension deduplicates standalone claims by attribute and value, preserves pending/confirmed state in SQLite, creates a safe default account and route for the current provider with automation off and sensitive data blocked, and switches to connected mode. On a new provider, one “create default account and route” button performs the same safe setup. SQLite then becomes the only source of truth; the extension handles browser capture and push without continuing to mutate a second standalone copy. “Disconnect and use standalone” first downloads a fresh SQLite snapshot, revokes the current client token, and only then returns to standalone mode. A failed transition deletes neither copy.
+
+JSON `import` and `export-browser` remain available for offline migration and backup.

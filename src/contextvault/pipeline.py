@@ -114,7 +114,15 @@ class ImportPipeline:
         """Import an explicit JSON backup from the independent browser extension."""
         if path.stat().st_size > 5_000_000:
             raise ValueError("Standalone browser backup exceeds the five-megabyte limit")
-        payload = json.loads(path.read_text(encoding="utf-8"))
+        raw = path.read_bytes()
+        payload = json.loads(raw)
+        return self.import_standalone_payload(
+            payload, space=space, backup_hash=hashlib.sha256(raw).hexdigest()
+        )
+
+    def import_standalone_payload(
+        self, payload: object, *, space: str = "personal", backup_hash: str | None = None
+    ) -> dict[str, int]:
         if not isinstance(payload, dict) or payload.get("schema") != 1:
             raise ValueError("Unsupported standalone browser backup schema")
         items = payload.get("claims")
@@ -128,7 +136,9 @@ class ImportPipeline:
         service = ProfileService(self.repository)
         existing = {(item.attribute, item.value_text) for item in self.repository.list_claims(space=space, limit=1000)}
         added = confirmed = skipped = 0
-        backup_hash = hashlib.sha256(path.read_bytes()).hexdigest()
+        backup_hash = backup_hash or hashlib.sha256(
+            json.dumps(payload, ensure_ascii=False, sort_keys=True).encode()
+        ).hexdigest()
         for item in items:
             if not isinstance(item, dict) or item.get("status") == "rejected":
                 skipped += 1

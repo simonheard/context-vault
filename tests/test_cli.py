@@ -122,6 +122,14 @@ class CliTests(unittest.TestCase):
             self.assertEqual(payload["claims"][0]["status"], "confirmed")
             self.assertEqual(payload["claims"][0]["value"], "Vim")
 
+    def test_link_code_only_is_short_and_non_blocking(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            vault_path = Path(directory) / "vault.sqlite"
+            output = io.StringIO()
+            with contextlib.redirect_stdout(output):
+                self.assertEqual(main(["--vault", str(vault_path), "link", "--code-only"]), 0)
+            self.assertRegex(output.getvalue(), r"Extension link code: \d{8}")
+
 
 if __name__ == "__main__":
     unittest.main()

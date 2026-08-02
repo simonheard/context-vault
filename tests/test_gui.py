@@ -10,8 +10,13 @@ from contextvault.gui import (
     dashboard_snapshot,
     list_rows,
     extension_request_authorized,
+    browser_vault_payload,
+    discovery_request_authorized,
+    link_request_authorized,
     request_authorized,
 )
+from contextvault.repository import VaultRepository
+from contextvault.services import ProfileService
 from contextvault.vault import initialize
 
 
@@ -51,6 +56,22 @@ class GuiDataTests(unittest.TestCase):
         self.assertFalse(request_authorized("https://evil.example", "127.0.0.1:8787", "", "secret"))
         self.assertFalse(request_authorized(None, "evil.example:8787", "", "secret"))
         self.assertTrue(request_authorized("chrome-extension://abc", "localhost:8787", "secret", "secret"))
+
+    def test_public_discovery_and_link_are_loopback_extension_only(self) -> None:
+        self.assertTrue(discovery_request_authorized("chrome-extension://abc", "127.0.0.1:8787"))
+        self.assertTrue(discovery_request_authorized(None, "localhost:8787"))
+        self.assertFalse(discovery_request_authorized("https://evil.example", "127.0.0.1:8787"))
+        self.assertTrue(link_request_authorized("chrome-extension://abc", "localhost:8787"))
+        self.assertFalse(link_request_authorized(None, "localhost:8787"))
+
+    def test_browser_bridge_export_uses_shared_schema(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            repository = VaultRepository(Path(directory) / "vault.sqlite")
+            claim = ProfileService(repository).add_candidate(attribute="preference.editor", value="Vim")
+            ProfileService(repository).confirm(claim.id)
+            payload = browser_vault_payload(repository)
+            self.assertEqual(payload["schema"], 1)
+            self.assertEqual(payload["claims"][0]["status"], "confirmed")
 
 
 if __name__ == "__main__":

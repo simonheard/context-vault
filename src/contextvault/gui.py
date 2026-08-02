@@ -10,7 +10,7 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import urlparse
 
-from contextvault.domain import Sensitivity, SourceType
+from contextvault.domain import ClaimStatus, Sensitivity, SourceType
 from contextvault.repository import VaultRepository
 from contextvault.services import ProfileService, claim_to_dict
 from contextvault.vault import initialize
@@ -126,7 +126,10 @@ def _handler_for(vault_path: Path) -> type[BaseHTTPRequestHandler]:
         def do_GET(self) -> None:  # noqa: N802
             parsed = urlparse(self.path)
             route = parsed.path
-            if route.startswith("/api/") and not self._authorized():
+            public_version = route == "/api/version" and discovery_request_authorized(
+                self.headers.get("Origin"), self.headers.get("Host", "")
+            )
+            if route.startswith("/api/") and not public_version and not self._authorized():
                 self._json({"error": "Local API request is not authorized"}, HTTPStatus.FORBIDDEN)
                 return
             if not self._protocol_allowed(route):
@@ -208,8 +211,12 @@ def _handler_for(vault_path: Path) -> type[BaseHTTPRequestHandler]:
                         "schema_version": SCHEMA_VERSION,
                         "protocol_version": PROTOCOL_VERSION,
                         "minimum_protocol_version": MIN_PROTOCOL_VERSION,
+                        "link_supported": True,
                     }
                 )
+                return
+            if route == "/api/bridge/export":
+                self._json(browser_vault_payload(repository))
                 return
             if route == "/api/automation/jobs":
                 self._json({"items": SyncService(repository).automation_jobs()})
@@ -227,14 +234,27 @@ def _handler_for(vault_path: Path) -> type[BaseHTTPRequestHandler]:
 
         def do_POST(self) -> None:  # noqa: N802
             route = urlparse(self.path).path
-            if route.startswith("/api/") and not self._authorized():
+            public_link = route == "/api/link" and link_request_authorized(
+                self.headers.get("Origin"), self.headers.get("Host", "")
+            )
+            if route.startswith("/api/") and not public_link and not self._authorized():
                 self._json({"error": "Local API request is not authorized"}, HTTPStatus.FORBIDDEN)
                 return
             if not self._protocol_allowed(route):
                 self._protocol_error()
                 return
             try:
-                body = self._read_json()
+                body = self._read_json(10_500_000 if route == "/api/bridge/import" else 64_000)
+                repository = VaultRepository(vault_path)
+                if route == "/api/link":
+                    item = repository.exchange_link_code(
+                        str(body.get("code", "")),
+                        str(body.get("client_id", "")),
+                        str(body.get("client_version", "unknown")),
+                        int(body.get("protocol_version", 1)),
+                    )
+                    self._json({"item": item}, HTTPStatus.CREATED)
+                    return
                 if route == "/api/accounts":
                     item = create_provider_account(
                         vault_path, str(body.get("platform", "")), str(body.get("label", ""))
@@ -247,7 +267,6 @@ def _handler_for(vault_path: Path) -> type[BaseHTTPRequestHandler]:
                     )
                     self._json({"item": item}, HTTPStatus.CREATED)
                     return
-                repository = VaultRepository(vault_path)
                 service = ProfileService(repository)
                 if route == "/api/claims":
                     claim = service.add_candidate(
@@ -335,6 +354,12 @@ def _handler_for(vault_path: Path) -> type[BaseHTTPRequestHandler]:
                     )
                     self._json({"item": item}, HTTPStatus.CREATED)
                     return
+                if route == "/api/bridge/import":
+                    item = ImportPipeline(repository).import_standalone_payload(
+                        body, space=str(body.get("space", "personal"))
+                    )
+                    self._json({"item": item}, HTTPStatus.CREATED)
+                    return
                 if route == "/api/captures/ingest":
                     item = CaptureService(repository).ingest(
                         str(body.get("account_id", "")),
@@ -361,6 +386,10 @@ def _handler_for(vault_path: Path) -> type[BaseHTTPRequestHandler]:
                     self._json({"item": item}, HTTPStatus.CREATED)
                     return
                 route_parts = route.strip("/").split("/")
+                if len(route_parts) == 4 and route_parts[:2] == ["api", "clients"] and route_parts[3] == "revoke":
+                    repository.revoke_client(route_parts[2])
+                    self._json({"id": route_parts[2], "status": "revoked"})
+                    return
                 if len(route_parts) == 4 and route_parts[:2] == ["api", "claims"]:
                     claim_id, action = route_parts[2], route_parts[3]
                     if action == "confirm":
@@ -462,12 +491,12 @@ def _handler_for(vault_path: Path) -> type[BaseHTTPRequestHandler]:
         def log_message(self, format: str, *args: object) -> None:
             return
 
-        def _read_json(self) -> dict[str, Any]:
+        def _read_json(self, max_bytes: int = 64_000) -> dict[str, Any]:
             content_type = self.headers.get("Content-Type", "").split(";", 1)[0].strip().lower()
             if content_type != "application/json":
                 raise ValueError("POST requests must use application/json")
             length = int(self.headers.get("Content-Length", "0"))
-            if length > 64_000:
+            if length > max_bytes:
                 raise ValueError("Request body is too large")
             payload = self.rfile.read(length)
             value = json.loads(payload or b"{}")
@@ -587,3 +616,41 @@ def request_authorized(
         and parsed.hostname in {"127.0.0.1", "localhost", "::1"}
         and parsed.netloc == host
     )
+
+
+def discovery_request_authorized(origin: str | None, host: str) -> bool:
+    """Permit only loopback native callers or Chrome extensions to discover version/link support."""
+    try:
+        host_name = urlparse(f"//{host}").hostname
+    except ValueError:
+        return False
+    if host_name not in {"127.0.0.1", "localhost", "::1"}:
+        return False
+    return not origin or origin.startswith("chrome-extension://")
+
+
+def link_request_authorized(origin: str | None, host: str) -> bool:
+    return bool(origin and origin.startswith("chrome-extension://")) and discovery_request_authorized(origin, host)
+
+
+def browser_vault_payload(repository: VaultRepository, space: str = "personal") -> dict[str, Any]:
+    status_map = {
+        ClaimStatus.CANDIDATE: "pending",
+        ClaimStatus.CONFIRMED: "confirmed",
+        ClaimStatus.REJECTED: "rejected",
+    }
+    claims = [
+        {
+            "id": claim.id,
+            "attribute": claim.attribute,
+            "value": claim.value_text,
+            "confidence": claim.confidence,
+            "sensitivity": claim.sensitivity.value,
+            "status": status_map[claim.status],
+            "provider": "contextvault-cli",
+            "createdAt": claim.created_at,
+        }
+        for claim in repository.list_claims(space=space, limit=1000)
+        if claim.status in status_map
+    ]
+    return {"schema": 1, "claims": claims, "captures": {}, "routes": {}, "receipts": []}

@@ -5,6 +5,7 @@ import hmac
 import json
 import sqlite3
 import secrets
+import time
 from contextlib import contextmanager
 from pathlib import Path
 from typing import Any, Iterator, Optional
@@ -69,6 +70,52 @@ class VaultRepository:
                 {},
             )
         return token
+
+    def create_link_code(self, ttl_seconds: int = 600) -> dict[str, Any]:
+        if not 60 <= ttl_seconds <= 3600:
+            raise ValueError("Link-code lifetime must be between 60 and 3600 seconds")
+        code = f"{secrets.randbelow(100_000_000):08d}"
+        digest = hashlib.sha256(f"{self.extension_pairing_token()}:{code}".encode()).hexdigest()
+        payload = {"hash": digest, "expires_at": int(time.time()) + ttl_seconds, "attempts": 0}
+        with self.transaction() as connection:
+            connection.execute(
+                "INSERT OR REPLACE INTO metadata(key, value) VALUES ('extension_link_code', ?)",
+                (json.dumps(payload, sort_keys=True),),
+            )
+        return {"code": code, "expires_at": payload["expires_at"]}
+
+    def exchange_link_code(
+        self, code: str, client_id: str, client_version: str, protocol_version: int
+    ) -> dict[str, Any]:
+        if len(code) != 8 or not code.isdigit():
+            raise ValueError("Link code must contain eight digits")
+        with self.transaction() as connection:
+            row = connection.execute(
+                "SELECT value FROM metadata WHERE key = 'extension_link_code'"
+            ).fetchone()
+            if row is None:
+                raise ValueError("No active link code; run contextvault link")
+            payload = json.loads(row[0])
+            if int(payload.get("expires_at", 0)) < int(time.time()):
+                connection.execute("DELETE FROM metadata WHERE key = 'extension_link_code'")
+                raise ValueError("Link code expired; run contextvault link again")
+            attempts = int(payload.get("attempts", 0)) + 1
+            expected = str(payload.get("hash", ""))
+            supplied = hashlib.sha256(f"{self.extension_pairing_token()}:{code}".encode()).hexdigest()
+            if attempts > 5 or not hmac.compare_digest(supplied, expected):
+                if attempts >= 5:
+                    connection.execute("DELETE FROM metadata WHERE key = 'extension_link_code'")
+                else:
+                    payload["attempts"] = attempts
+                    connection.execute(
+                        "UPDATE metadata SET value = ? WHERE key = 'extension_link_code'",
+                        (json.dumps(payload, sort_keys=True),),
+                    )
+                raise ValueError("Link code is invalid")
+            connection.execute("DELETE FROM metadata WHERE key = 'extension_link_code'")
+        return self.register_client(
+            client_id, "chrome-extension", client_version, protocol_version
+        )
 
     def add_account(self, platform: str, label: str) -> ProviderAccount:
         platform = platform.strip().lower()
@@ -815,6 +862,15 @@ class VaultRepository:
                 "SELECT * FROM sync_clients ORDER BY last_seen_at DESC"
             ).fetchall()
         return [{key: row[key] for key in row.keys() if key != "token_hash"} for row in rows]
+
+    def revoke_client(self, client_id: str) -> None:
+        with self.transaction() as connection:
+            cursor = connection.execute(
+                "UPDATE sync_clients SET status = 'revoked', token_hash = NULL WHERE id = ?",
+                (client_id,),
+            )
+            if cursor.rowcount != 1:
+                raise ValueError("Unknown sync client")
 
     def _append_event(
         self,

@@ -81,7 +81,7 @@ The first release prioritizes:
 
 ## Repository status
 
-This repository now contains a runnable local closed loop, bidirectional user-session automation, and coding-agent adapters (v0.11.0):
+This repository now contains a runnable local closed loop, bidirectional user-session automation, and coding-agent adapters (v0.12.0):
 
 - a zero-dependency Python CLI;
 - a SQLite store and explicit domain model centered on `Entity`, `Claim`, `ProviderAccount`, `ProfileSpace`, and `AttachmentRef`;
@@ -112,6 +112,7 @@ python3 -m venv .venv
 source .venv/bin/activate
 python3 -m pip install -e .
 contextvault init
+contextvault link
 contextvault status
 contextvault doctor
 contextvault ui

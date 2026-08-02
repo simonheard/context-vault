@@ -77,7 +77,7 @@ ChatGPT 历史对话       设备扫描       手动填写       其他数据源
 
 ## 当前仓库状态
 
-当前已经具备可运行的本地完整闭环、双向用户登录态自动化和 CLI 适配器（v0.11.0），包含：
+当前已经具备可运行的本地完整闭环、双向用户登录态自动化和 CLI 适配器（v0.12.0），包含：
 
 - 零依赖 Python CLI；
 - SQLite 资料库与显式领域模型，核心对象为 `Entity`、`Claim`、`ProviderAccount`、`ProfileSpace` 和 `AttachmentRef`；
@@ -109,6 +109,7 @@ python3 -m venv .venv
 source .venv/bin/activate
 python3 -m pip install -e .
 contextvault init
+contextvault link
 contextvault status
 contextvault doctor
 contextvault ui

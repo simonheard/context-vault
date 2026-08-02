@@ -20,13 +20,13 @@ If a provider changes its page structure and the composer adapter stops working,
 
 1. Open `chrome://extensions`, enable Developer mode, and load the repository's `extension/` directory. The packaged `contextvault-extension.zip` is also available from CI.
 2. For web-only use, choose “use the extension directly.” Python, the CLI, and a local service are not required.
-3. For SQLite, multi-account routes, local models, and complete auditing, start the optional service:
+3. For SQLite, multi-account routes, local models, and complete auditing, run:
 
    ```bash
-   contextvault ui
+   contextvault link
    ```
 
-4. Get the pairing token:
+4. Enter the displayed eight-digit code in the extension and choose “merge and connect.” Standalone claims are deduplicated and merged automatically. The advanced fallback token is available with:
 
    ```bash
    contextvault extension token
@@ -34,7 +34,7 @@ If a provider changes its page structure and the composer adapter stops working,
 
    It is also available on the management UI's Privacy page.
 
-5. Paste the token into the extension and save. It authorizes only local ContextVault API access.
+5. Only for the advanced fallback, paste the token into the extension and save. It authorizes only local ContextVault API access.
 6. Sign in normally to the target AI, open a conversation, and select the extension icon.
 
 Run `contextvault extension rotate-token` when an already paired extension is no longer trusted. Every old token becomes invalid immediately, and retained extensions must pair again with the new token.

@@ -66,6 +66,9 @@ async function connect() {
   const [{ items }, accountResult] = await Promise.all([api("/api/routes"), api("/api/accounts")]);
   state.routes = items.filter((item) => item.target_platform === state.provider && item.enabled);
   state.accounts = accountResult.items.filter((item) => item.platform === state.provider && item.status === "active");
+  $("preview").disabled = false;
+  $("capture-now").disabled = false;
+  $("enable-capture").disabled = false;
   const select = $("route-select");
   select.replaceChildren();
   state.routes.forEach((route) => {
@@ -80,6 +83,9 @@ async function connect() {
     option.value = "";
     select.append(option);
     $("preview").disabled = true;
+    $("quick-setup").hidden = false;
+  } else {
+    $("quick-setup").hidden = true;
   }
   const captureSelect = $("capture-account");
   captureSelect.replaceChildren();
@@ -100,7 +106,58 @@ async function connect() {
   updateAccountLabel();
   $("setup").hidden = true;
   $("workflow").hidden = false;
+  $("open-vault").textContent = "打开本地管理后台";
+  $("switch-mode").textContent = "断开并独立使用";
   message("本地服务已连接");
+}
+
+async function ensureCurrentProvider() {
+  if (state.mode !== "service" || !state.provider) throw new Error("请先连接本地 CLI 并打开受支持的 AI 页面");
+  const accounts = await api("/api/accounts");
+  let account = accounts.items.find((item) => item.platform === state.provider && item.status === "active");
+  if (!account) {
+    const created = await api("/api/accounts", {
+      method: "POST",
+      body: JSON.stringify({ platform: state.provider, label: `${CONTEXTVAULT_PROVIDERS[state.provider].name}（当前 Chrome Profile）` }),
+    });
+    account = created.item;
+  }
+  const routes = await api("/api/routes");
+  if (!routes.items.some((item) => item.target_platform === state.provider && item.enabled)) {
+    await api("/api/routes", {
+      method: "POST",
+      body: JSON.stringify({ target_account_id: account.id, space: "personal", categories: "*", max_sensitivity: "personal", sensitive_mode: "block", automation_mode: "manual" }),
+    });
+  }
+  await connect();
+  message(`已为 ${CONTEXTVAULT_PROVIDERS[state.provider].name} 创建安全默认路线；自动模式仍保持关闭。`);
+}
+
+async function linkService() {
+  const standalone = await contextVaultStandaloneLoad();
+  state.base = $("api-base").value.trim().replace(/\/$/, "");
+  state.token = "";
+  const code = $("link-code").value.trim();
+  if (!/^http:\/\/(127\.0\.0\.1|localhost):\d+$/.test(state.base)) throw new Error("只允许连接本机 HTTP 服务");
+  if (!/^\d{8}$/.test(code)) throw new Error("请输入终端显示的 8 位链接码");
+  const version = await api("/api/version");
+  if (!version.link_supported) throw new Error("本地 CLI 版本太旧，不支持短码链接");
+  const stored = await chrome.storage.local.get(["clientId"]);
+  state.clientId = stored.clientId || crypto.randomUUID();
+  const linked = await api("/api/link", {
+    method: "POST",
+    body: JSON.stringify({ code, client_id: state.clientId, client_version: chrome.runtime.getManifest().version, protocol_version: PROTOCOL_VERSION }),
+  });
+  state.token = linked.item.client_token;
+  const merged = await api("/api/bridge/import", {
+    method: "POST",
+    body: JSON.stringify({ schema: 1, claims: standalone.claims, space: "personal" }),
+  });
+  $("pairing-token").value = state.token;
+  await chrome.storage.local.set({ clientId: state.clientId, base: state.base, token: state.token, mode: "service", standaloneArchive: standalone });
+  await connect();
+  if (!state.routes.length) await ensureCurrentProvider();
+  message(`已合并并连接：新增 ${merged.item.added} 条，确认 ${merged.item.confirmed} 条，跳过重复 ${merged.item.skipped} 条。SQLite 现在是主资料库。`);
 }
 
 async function startStandalone() {
@@ -117,13 +174,33 @@ async function startStandalone() {
   const routeSelect = $("route-select");
   routeSelect.replaceChildren();
   const routeOption = document.createElement("option"); routeOption.value = state.routes[0].id; routeOption.textContent = `浏览器资料库 → ${state.routes[0].target_label}`; routeSelect.append(routeOption);
+  $("quick-setup").hidden = true;
   const captureSelect = $("capture-account");
   captureSelect.replaceChildren();
   const accountOption = document.createElement("option"); accountOption.value = state.accounts[0].id; accountOption.textContent = state.accounts[0].account_label; captureSelect.append(accountOption);
   $("preview").disabled = false; $("capture-now").disabled = false; $("enable-capture").disabled = false;
   updateAccountLabel();
   $("setup").hidden = true; $("workflow").hidden = false;
+  $("open-vault").textContent = "管理独立资料库";
+  $("switch-mode").textContent = "连接本地 CLI";
   message("独立插件资料库已启用；不需要 CLI 或本地服务");
+}
+
+async function switchMode() {
+  if (state.mode !== "service") {
+    $("workflow").hidden = true; $("setup").hidden = false; message("运行 contextvault link 后输入 8 位短码即可合并连接"); return;
+  }
+  const snapshot = await api("/api/bridge/export");
+  const standalone = contextVaultNormalizeStandalone(snapshot);
+  await contextVaultStandaloneSave(standalone);
+  if (state.clientId) {
+    await api(`/api/clients/${state.clientId}/revoke`, { method: "POST", body: "{}" }).catch(() => undefined);
+  }
+  await chrome.storage.local.remove(["base", "token"]);
+  await chrome.storage.local.set({ mode: "standalone" });
+  state.token = "";
+  await startStandalone();
+  message(`已拉取 ${standalone.claims.length} 条最新资料并断开；扩展现在独立运行。`);
 }
 
 function updateAccountLabel() {
@@ -268,10 +345,12 @@ async function run(action) {
 }
 
 $("save-settings").addEventListener("click", () => run(connect));
+$("link-service").addEventListener("click", () => run(linkService));
 $("start-standalone").addEventListener("click", () => run(startStandalone));
-$("open-vault").addEventListener("click", () => chrome.runtime.openOptionsPage());
-$("switch-mode").addEventListener("click", async () => { await chrome.storage.local.remove(["mode"]); $("workflow").hidden = true; $("setup").hidden = false; message("请选择运行模式"); });
+$("open-vault").addEventListener("click", () => state.mode === "service" ? chrome.tabs.create({ url: state.base }) : chrome.runtime.openOptionsPage());
+$("switch-mode").addEventListener("click", () => run(switchMode));
 $("route-select").addEventListener("change", updateAccountLabel);
+$("quick-setup").addEventListener("click", () => run(ensureCurrentProvider));
 $("account-confirm").addEventListener("change", () => {
   $("inject").disabled = !state.preview || !$("account-confirm").checked || state.preview.awaiting_confirmation.length > 0;
 });

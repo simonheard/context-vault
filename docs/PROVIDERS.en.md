@@ -4,7 +4,7 @@
 
 ## Current registry
 
-Browser extension v0.4 registers:
+Browser extension v0.5 registers:
 
 - global providers: ChatGPT, Gemini, Claude, Perplexity, Microsoft Copilot, Grok, Mistral Le Chat, and Poe;
 - Chinese providers: DeepSeek, Kimi, Qwen, Doubao, Tencent Yuanbao, Zhipu Qingyan, ERNIE/Wenxiaoyan, iFlytek Spark, Tiangong AI, and Hailuo AI.

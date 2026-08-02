@@ -9,7 +9,7 @@ from pathlib import Path
 
 from contextvault import __version__
 from contextvault.vault import initialize, status
-from contextvault.gui import serve
+from contextvault.gui import browser_vault_payload, serve
 from contextvault.domain import ClaimStatus, Sensitivity, SourceType
 from contextvault.repository import VaultRepository
 from contextvault.services import ProfileService, claim_to_dict
@@ -43,6 +43,11 @@ def build_parser() -> argparse.ArgumentParser:
     ui_parser = subparsers.add_parser("ui", help="start the local management UI")
     ui_parser.add_argument("--host", default="127.0.0.1")
     ui_parser.add_argument("--port", type=int, default=8787)
+    link_parser = subparsers.add_parser("link", help="link the standalone extension with a short one-time code")
+    link_parser.add_argument("--host", default="127.0.0.1")
+    link_parser.add_argument("--port", type=int, default=8787)
+    link_parser.add_argument("--ttl", type=int, default=600)
+    link_parser.add_argument("--code-only", action="store_true", help="print a code for an already running local service")
 
     accounts_parser = subparsers.add_parser("accounts", help="manage AI provider accounts")
     account_commands = accounts_parser.add_subparsers(dest="account_command", required=True)
@@ -308,6 +313,17 @@ def main(argv: list[str] | None = None) -> int:
                 raise ValueError("The management UI may only bind to a loopback host")
             serve(args.vault, args.host, args.port)
             return 0
+        if args.command == "link":
+            if args.host not in {"127.0.0.1", "localhost", "::1"}:
+                raise ValueError("The link service may only bind to a loopback host")
+            item = VaultRepository(args.vault).create_link_code(args.ttl)
+            print(f"Extension link code: {item['code']}", flush=True)
+            print(f"Expires in {args.ttl // 60} minutes and can be used once.", flush=True)
+            if args.code_only:
+                return 0
+            print("Keep this process running while the extension is connected.", flush=True)
+            serve(args.vault, args.host, args.port)
+            return 0
         if args.command == "import":
             pipeline = ImportPipeline(VaultRepository(args.vault))
             standalone = args.format == "browser-vault"
@@ -562,22 +578,7 @@ def main(argv: list[str] | None = None) -> int:
                     print(json.dumps(service.health(args.space), ensure_ascii=False, indent=2))
                     return 0
                 if args.profile_command == "export-browser":
-                    status_map = {ClaimStatus.CANDIDATE: "pending", ClaimStatus.CONFIRMED: "confirmed", ClaimStatus.REJECTED: "rejected"}
-                    claims = [
-                        {
-                            "id": claim.id,
-                            "attribute": claim.attribute,
-                            "value": claim.value_text,
-                            "confidence": claim.confidence,
-                            "sensitivity": claim.sensitivity.value,
-                            "status": status_map[claim.status],
-                            "provider": "contextvault-cli",
-                            "createdAt": claim.created_at,
-                        }
-                        for claim in repository.list_claims(space=args.space, limit=1000)
-                        if claim.status in status_map
-                    ]
-                    payload = {"schema": 1, "claims": claims, "captures": {}, "routes": {}, "receipts": []}
+                    payload = browser_vault_payload(repository, args.space)
                     args.output.expanduser().resolve().write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
                     print(f"Exported browser vault: {args.output}")
                     return 0

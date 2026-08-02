@@ -2,7 +2,7 @@
 
 [中文](IMPLEMENTATION_STATUS.md)
 
-## v0.11 independent CLI/extension operation and bidirectional automation
+## v0.12 independent operation, one-step merge/link, and bidirectional automation
 
 The following capabilities now run through the CLI or local management UI:
 
@@ -28,6 +28,7 @@ The following capabilities now run through the CLI or local management UI:
 - provide deterministic, Ollama, LM Studio, OpenAI-compatible, Codex CLI, and Claude Code summary engines.
 - provide a Python-free standalone extension vault, candidate review, JSON backup, capture, and push scheduler;
 - publish an independent CLI wheel without extension files and explicitly migrate extension backups into SQLite.
+- exchange an eight-digit, ten-minute, one-use link code with a five-failure lockout; linking deduplicates and merges, while disconnecting snapshots the latest SQLite profile first.
 
 ## Capabilities requiring an external platform or deployed infrastructure
 
@@ -45,6 +46,7 @@ The local implementation supplies route, manifest, receipt, event-cursor, and pr
 
 ```bash
 contextvault import chatgpt-export.zip --account <account-id>
+contextvault link
 contextvault import contextvault-browser.json --format browser-vault
 contextvault claims list
 contextvault claims confirm-all

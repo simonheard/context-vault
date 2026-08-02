@@ -3,7 +3,7 @@
 [English](VERSIONING.en.md)
 
 ContextVault 分开管理四种版本：Python 产品版本、SQLite schema、客户端协议和具体适配器版本。
-当前为产品 `0.11.0`、schema `9`、协议 `3`、Chrome 扩展 `0.4.0`，最低兼容客户端协议为 `2`。独立扩展资料库 schema 为 `1`。
+当前为产品 `0.12.0`、schema `9`、协议 `3`、Chrome 扩展 `0.5.0`，最低兼容客户端协议为 `2`。独立扩展资料库 schema 为 `1`。
 
 - `/api/version` 在读取 route 前完成握手；
 - 扩展发送 `X-ContextVault-Protocol`，超出服务端 min/max 时返回 HTTP 426；

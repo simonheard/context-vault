@@ -25,13 +25,13 @@
    也可以运行 `python3 scripts/package_extension.py` 生成 `dist/contextvault-extension.zip`。
    GitHub Actions 的每次 `main` 构建也会生成同名 artifact。
 3. 只使用网页能力时，选择“直接使用插件”。不需要安装 Python、CLI 或本地服务。
-4. 需要 SQLite、多账号 route、本地模型和完整审计时，再启动可选服务：
+4. 需要 SQLite、多账号 route、本地模型和完整审计时，运行：
 
    ```bash
-   contextvault ui
+   contextvault link
    ```
 
-5. 获取配对 Token：
+5. 把终端显示的 8 位短码输入扩展，点击“合并并连接”。独立资料自动去重合并。高级备用 Token 为：
 
    ```bash
    contextvault extension token
@@ -39,7 +39,7 @@
 
    也可以在管理后台的“隐私与授权”页面复制。
 
-6. 把 Token 粘贴到扩展并保存。Token 只授权该扩展访问本机 ContextVault API。
+6. 仅使用高级备用方式时，把 Token 粘贴到扩展并保存。Token 只授权该扩展访问本机 ContextVault API。
 7. 正常登录目标 AI，打开对话页面，然后点击扩展图标。
 
 不再信任某个已配对扩展时，运行 `contextvault extension rotate-token`。所有旧 Token 会立即失效，

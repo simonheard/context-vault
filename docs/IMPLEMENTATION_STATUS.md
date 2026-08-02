@@ -2,7 +2,7 @@
 
 [English](IMPLEMENTATION_STATUS.en.md)
 
-## v0.11 CLI/扩展独立运行与双向自动化
+## v0.12 独立运行、一键合并连接与双向自动化
 
 以下能力已经可以通过 CLI 或本地管理后台运行：
 
@@ -28,6 +28,7 @@
 - 确定性、Ollama、LM Studio、OpenAI-compatible、Codex CLI 和 Claude Code 总结引擎。
 - 不依赖 Python 的扩展独立资料库、候选审阅、JSON 备份、捕获和推送调度器；
 - 不包含扩展目录的独立 CLI wheel，以及扩展备份到 SQLite 的显式迁移命令。
+- 8 位、十分钟、一次性、五次失败锁定的扩展链接码；连接时自动去重合并，断开时先生成最新独立快照。
 
 ## 需要外部平台或部署基础设施的能力
 
@@ -46,6 +47,7 @@
 
 ```bash
 contextvault import chatgpt-export.zip --account <account-id>
+contextvault link
 contextvault import contextvault-browser.json --format browser-vault
 contextvault claims list
 contextvault claims confirm-all
